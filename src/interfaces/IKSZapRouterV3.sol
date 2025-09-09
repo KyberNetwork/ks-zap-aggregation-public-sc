@@ -1,0 +1,30 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import {ZapParams} from '../types/ZapParams.sol';
+
+interface IKSZapRouterV3 {
+  /// @notice Thrown when the deadline is passed
+  error DeadlinePassed(uint256 deadline, uint256 blockTimestamp);
+
+  /// @notice Thrown when failed to call the executor
+  error CallExecutorFailed();
+
+  /// @notice Thrown when failed to permit using permit2
+  error Permit2PermitFailed();
+
+  /// @notice Thrown when failed to transfer from using permit2
+  error Permit2ERC721PermitFailed();
+
+  /// @notice Thrown when failed to transfer from permit2
+  error Permit2TransferFromFailed();
+
+  /// @notice Emitted when the client data is set
+  event ClientData(bytes clientData);
+
+  /// @notice Entry point for zap action
+  function zap(ZapParams calldata zapParams) external;
+
+  /// @notice Returns the address of who called the zap function
+  function msgSender() external view returns (address);
+}
