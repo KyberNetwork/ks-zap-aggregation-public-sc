@@ -2,5 +2,5 @@
 pragma solidity ^0.8.0;
 
 interface IKSZapExecutor {
-    function executeZap(bytes calldata data) external returns (bytes memory result);
+  function executeZap(bytes calldata data) external returns (bytes memory result);
 }

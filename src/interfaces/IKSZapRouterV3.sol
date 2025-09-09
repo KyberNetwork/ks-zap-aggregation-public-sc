@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+import {ERC20Params} from '../types/ERC20Params.sol';
+import {ERC721Params} from '../types/ERC721Params.sol';
+import {ValidateParams} from '../types/ValidateParams.sol';
 import {ZapParams} from '../types/ZapParams.sol';
 
 interface IKSZapRouterV3 {
@@ -12,12 +15,13 @@ interface IKSZapRouterV3 {
 
   /// @notice Thrown when failed to permit using permit2
   error Permit2PermitFailed();
-
-  /// @notice Thrown when failed to transfer from using permit2
-  error Permit2ERC721PermitFailed();
-
+  
   /// @notice Thrown when failed to transfer from permit2
   error Permit2TransferFromFailed();
+
+  event Zap(
+    ERC20Params[] erc20s, ERC721Params[] erc721s, ValidateParams[] validateParams, address executor
+  );
 
   /// @notice Emitted when the client data is set
   event ClientData(bytes clientData);

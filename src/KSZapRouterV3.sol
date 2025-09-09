@@ -42,6 +42,8 @@ contract KSZapRouterV3 is IKSZapRouterV3, Lock, ManagementPausable, ManagementRe
     for (uint256 i = 0; i < zapParams.validateParams.length; i++) {
       zapParams.validateParams[i].afterExecution(beforeExecutionData[i]);
     }
+
+    emit Zap(zapParams.erc20s, zapParams.erc721s, zapParams.validateParams, zapParams.executor);
   }
 
   /// @inheritdoc IKSZapRouterV3
