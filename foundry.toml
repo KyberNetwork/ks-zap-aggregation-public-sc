@@ -1,7 +1,9 @@
 [profile.default]
-src = "src"
-out = "out"
-libs = ["lib"]
+optimizer = true
+optimizer_runs = 44_444_444
+fs_permissions = [{ access = "read-write", path = "./"}]
+verbosity = 3
+via_ir = true
 
 [fmt]
 line_length = 100
