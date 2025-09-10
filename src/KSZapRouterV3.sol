@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity 0.8.30;
 
 import {IKSZapExecutor} from './interfaces/IKSZapExecutor.sol';
 import {IKSZapRouterV3} from './interfaces/IKSZapRouterV3.sol';
@@ -14,19 +14,29 @@ import {Lock} from 'ks-common-sc/src/base/Lock.sol';
 import {ManagementBase} from 'ks-common-sc/src/base/ManagementBase.sol';
 import {ManagementPausable} from 'ks-common-sc/src/base/ManagementPausable.sol';
 import {ManagementRescuable} from 'ks-common-sc/src/base/ManagementRescuable.sol';
+import {KSRoles} from 'ks-common-sc/src/libraries/KSRoles.sol';
 
 import {CustomRevert} from 'ks-common-sc/src/libraries/CustomRevert.sol';
 
 contract KSZapRouterV3 is IKSZapRouterV3, Lock, ManagementPausable, ManagementRescuable {
   address public immutable PERMIT2;
 
-  constructor(address initialAdmin, address permit2) ManagementBase(0, initialAdmin) {
+  constructor(
+    address initialAdmin,
+    address[] memory initialGuardians,
+    address[] memory initialRescuers,
+    address permit2
+  ) ManagementBase(0, initialAdmin) {
+    _batchGrantRole(KSRoles.GUARDIAN_ROLE, initialGuardians);
+    _batchGrantRole(KSRoles.RESCUER_ROLE, initialRescuers);
+
     PERMIT2 = permit2;
   }
 
   /// @inheritdoc IKSZapRouterV3
   function zap(ZapParams calldata zapParams)
     external
+    whenNotPaused
     returns (bytes memory result, uint256 gasUsed)
   {
     uint256 gasBefore = gasleft();
