@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {IERC20sZapValidator} from '../../interfaces/validators/modules/IERC20sZapValidator.sol';
+import {IERC20sZapValidator} from '../../../interfaces/validators/modules/1/IERC20sZapValidator.sol';
 
 import {TokenHelper} from 'ks-common-sc/src/libraries/token/TokenHelper.sol';
 

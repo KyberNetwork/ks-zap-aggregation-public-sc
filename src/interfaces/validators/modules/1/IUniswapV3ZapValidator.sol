@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {PackedU8} from '../../../types/PackedU8.sol';
+import {PackedU8} from '../../../../types/PackedU8.sol';
 
 interface IUniswapV3ZapValidator {
   error ZapIn__UniswapV3Fork__InvalidTickRange();

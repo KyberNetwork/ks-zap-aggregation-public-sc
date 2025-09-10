@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
-import {BytesHelper} from '../../libraries/BytesHelper.sol';
+import {BytesHelper} from '../../../libraries/BytesHelper.sol';
 
 import {IUniswapV3ZapValidator} from
-  '../../interfaces/validators/modules/IUniswapV3ZapValidator.sol';
-import {IUniswapV3PosM} from '../../interfaces/vendors/uniswap-v3/IUniswapV3PosM.sol';
+  '../../../interfaces/validators/modules/1/IUniswapV3ZapValidator.sol';
+import {IUniswapV3PosM} from '../../../interfaces/vendors/uniswap-v3/IUniswapV3PosM.sol';
 
 contract UniswapV3ZapValidator is IUniswapV3ZapValidator {
   function _beforeExecution_UniswapV3Fork(bytes calldata _beforeExecutionInput)
