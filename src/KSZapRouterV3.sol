@@ -25,7 +25,12 @@ contract KSZapRouterV3 is IKSZapRouterV3, Lock, ManagementPausable, ManagementRe
   }
 
   /// @inheritdoc IKSZapRouterV3
-  function zap(ZapParams calldata zapParams) external {
+  function zap(ZapParams calldata zapParams)
+    external
+    returns (bytes memory result, uint256 gasUsed)
+  {
+    uint256 gasBefore = gasleft();
+
     bytes[] memory beforeExecutionData = new bytes[](zapParams.validateParams.length);
     for (uint256 i = 0; i < zapParams.validateParams.length; i++) {
       beforeExecutionData[i] = zapParams.validateParams[i].beforeExecution();
@@ -37,13 +42,17 @@ contract KSZapRouterV3 is IKSZapRouterV3, Lock, ManagementPausable, ManagementRe
     _permit2Permit(zapParams.permit2Data);
     _permit2TransferFrom(zapParams.erc20s, usePermit2, zapParams.executor);
 
-    _callExecutor(zapParams.executor, zapParams.executorData);
+    result = _callExecutor(zapParams.executor, zapParams.executorData);
 
     for (uint256 i = 0; i < zapParams.validateParams.length; i++) {
       zapParams.validateParams[i].afterExecution(beforeExecutionData[i]);
     }
 
     emit Zap(zapParams.erc20s, zapParams.erc721s, zapParams.validateParams, zapParams.executor);
+
+    emit ClientData(zapParams.clientData);
+
+    gasUsed = gasBefore - gasleft();
   }
 
   /// @inheritdoc IKSZapRouterV3
@@ -114,8 +123,12 @@ contract KSZapRouterV3 is IKSZapRouterV3, Lock, ManagementPausable, ManagementRe
     }
   }
 
-  function _callExecutor(address executor, bytes calldata executorData) internal {
-    (bool success,) =
+  function _callExecutor(address executor, bytes calldata executorData)
+    internal
+    returns (bytes memory result)
+  {
+    bool success;
+    (success, result) =
       executor.call{value: msg.value}(abi.encodeCall(IKSZapExecutor.executeZap, executorData));
     if (!success) {
       CustomRevert.bubbleUpAndRevertWith(

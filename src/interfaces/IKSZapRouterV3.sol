@@ -15,7 +15,7 @@ interface IKSZapRouterV3 {
 
   /// @notice Thrown when failed to permit using permit2
   error Permit2PermitFailed();
-  
+
   /// @notice Thrown when failed to transfer from permit2
   error Permit2TransferFromFailed();
 
@@ -27,7 +27,9 @@ interface IKSZapRouterV3 {
   event ClientData(bytes clientData);
 
   /// @notice Entry point for zap action
-  function zap(ZapParams calldata zapParams) external;
+  function zap(ZapParams calldata zapParams)
+    external
+    returns (bytes memory result, uint256 gasUsed);
 
   /// @notice Returns the address of who called the zap function
   function msgSender() external view returns (address);
