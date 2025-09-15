@@ -28,7 +28,7 @@ contract UniswapV3ForkZapValidator is IUniswapV3ForkZapValidator {
         abi.encodeCall(IUniswapV3NFT.positions, (beforeExecutionInput.tokenId))
       );
 
-      uint256 liquidityOffset = beforeExecutionInput.positionDataOffsets.at(0);
+      uint256 liquidityOffset = beforeExecutionInput.positionDataOffsets.at(2);
       uint256 initialLiquidity = BytesHelper.mloadUint256(positionData, liquidityOffset * 32);
 
       return abi.encode(initialLiquidity);
@@ -61,18 +61,18 @@ contract UniswapV3ForkZapValidator is IUniswapV3ForkZapValidator {
       uint256 totalSupply = _beforeExecutionOutput.decodeUint256();
       tokenId = IUniswapV3NFT(beforeExecutionInput.posManager).tokenByIndex(totalSupply);
 
-      uint256 tickLowerOffset = beforeExecutionInput.positionDataOffsets.at(1);
+      uint256 tickLowerOffset = beforeExecutionInput.positionDataOffsets.at(0);
       int256 tickLower = BytesHelper.mloadInt256(positionData, tickLowerOffset * 32);
       require(tickLower == afterExecutionInput.tickLower, ZapInUniswapV3ForkInvalidTickRange());
 
-      uint256 tickUpperOffset = beforeExecutionInput.positionDataOffsets.at(2);
+      uint256 tickUpperOffset = beforeExecutionInput.positionDataOffsets.at(1);
       int256 tickUpper = BytesHelper.mloadInt256(positionData, tickUpperOffset * 32);
       require(tickUpper == afterExecutionInput.tickUpper, ZapInUniswapV3ForkInvalidTickRange());
     } else {
       initialLiquidity = _beforeExecutionOutput.decodeUint256();
     }
 
-    uint256 liquidityOffset = beforeExecutionInput.positionDataOffsets.at(0);
+    uint256 liquidityOffset = beforeExecutionInput.positionDataOffsets.at(2);
     uint256 currentLiquidity = BytesHelper.mloadUint256(positionData, liquidityOffset * 32);
     require(
       currentLiquidity >= initialLiquidity + afterExecutionInput.minLiquidity,
@@ -107,7 +107,7 @@ contract UniswapV3ForkZapValidator is IUniswapV3ForkZapValidator {
       abi.encodeCall(IUniswapV3NFT.positions, (beforeExecutionInput.tokenId))
     );
 
-    uint256 liquidityOffset = beforeExecutionInput.positionDataOffsets.at(0);
+    uint256 liquidityOffset = beforeExecutionInput.positionDataOffsets.at(2);
     uint256 currentLiquidity = BytesHelper.mloadUint256(positionData, liquidityOffset * 32);
     require(
       currentLiquidity + afterExecutionInput.liquidityRemoved == initialLiquidity,
