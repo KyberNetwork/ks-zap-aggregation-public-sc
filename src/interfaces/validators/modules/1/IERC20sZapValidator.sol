@@ -2,14 +2,14 @@
 pragma solidity ^0.8.0;
 
 interface IERC20sZapValidator {
-  error ZapIn__ERC20s__InsufficientAmount();
+  error ZapInERC20sInsufficientAmount();
 
-  struct ZapIn__ERC20s_BeforeExecutionInput {
+  struct ZapInERC20sBeforeExecutionInput {
     address[] tokens;
     address recipient;
   }
 
-  struct ZapIn__ERC20s_AfterExecutionInput {
+  struct ZapInERC20sAfterExecutionInput {
     uint256[] minAmounts;
   }
 }
