@@ -47,7 +47,7 @@ contract KSZapRouterV3 is IKSZapRouterV3, Lock, ManagementPausable, ManagementRe
     }
 
     bool[] memory usePermit2 = _collectERC20s(zapParams.erc20s, zapParams.executor);
-    _collectERC721s(zapParams.erc721s);
+    _collectERC721s(zapParams.erc721s, zapParams.executor);
 
     _permit2Permit(zapParams.permit2Data);
     _permit2TransferFrom(zapParams.erc20s, usePermit2, zapParams.executor);
@@ -127,9 +127,9 @@ contract KSZapRouterV3 is IKSZapRouterV3, Lock, ManagementPausable, ManagementRe
     }
   }
 
-  function _collectERC721s(ERC721Params[] calldata erc721s) internal {
+  function _collectERC721s(ERC721Params[] calldata erc721s, address executor) internal {
     for (uint256 i = 0; i < erc721s.length; i++) {
-      erc721s[i].collect(msg.sender);
+      erc721s[i].collect(executor);
     }
   }
 
