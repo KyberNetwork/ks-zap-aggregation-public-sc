@@ -23,7 +23,7 @@ function toPackedU8(uint8[] memory values) pure returns (PackedU8) {
 library PackedU8Library {
   function at(PackedU8 self, uint256 index) internal pure returns (uint8 value) {
     assembly ("memory-safe") {
-      value := and(shl(mul(8, index), self), MASK_8_BITS)
+      value := and(shr(mul(8, index), self), MASK_8_BITS)
     }
   }
 }
