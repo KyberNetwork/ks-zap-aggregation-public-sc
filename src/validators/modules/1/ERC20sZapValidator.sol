@@ -17,7 +17,8 @@ contract ERC20sZapValidator is IERC20sZapValidator {
   {
     ZapInERC20sBeforeExecutionInput calldata beforeExecutionInput;
     assembly ("memory-safe") {
-      beforeExecutionInput := _beforeExecutionInput.offset
+      beforeExecutionInput :=
+        add(_beforeExecutionInput.offset, calldataload(_beforeExecutionInput.offset))
     }
 
     uint256[] memory initialBalances = new uint256[](beforeExecutionInput.tokens.length);
@@ -35,12 +36,14 @@ contract ERC20sZapValidator is IERC20sZapValidator {
   ) internal view {
     ZapInERC20sBeforeExecutionInput calldata beforeExecutionInput;
     assembly ("memory-safe") {
-      beforeExecutionInput := _beforeExecutionInput.offset
+      beforeExecutionInput :=
+        add(_beforeExecutionInput.offset, calldataload(_beforeExecutionInput.offset))
     }
 
     ZapInERC20sAfterExecutionInput calldata afterExecutionInput;
     assembly ("memory-safe") {
-      afterExecutionInput := _afterExecutionInput.offset
+      afterExecutionInput :=
+        add(_afterExecutionInput.offset, calldataload(_afterExecutionInput.offset))
     }
 
     uint256[] calldata initialBalances = _beforeExecutionOutput.decodeUint256Array(0);
