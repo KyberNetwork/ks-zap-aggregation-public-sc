@@ -36,6 +36,7 @@ contract KSZapRouterV3 is IKSZapRouterV3, Lock, ManagementPausable, ManagementRe
   /// @inheritdoc IKSZapRouterV3
   function zap(ZapParams calldata zapParams)
     external
+    payable
     whenNotPaused
     returns (bytes memory result, uint256 gasUsed)
   {

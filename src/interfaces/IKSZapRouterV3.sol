@@ -13,6 +13,9 @@ interface IKSZapRouterV3 {
   /// @notice Thrown when failed to call the executor
   error CallExecutorFailed();
 
+  /// @notice Thrown when the msg.value is not enough
+  error NotEnoughMsgValue();
+
   /// @notice Thrown when failed to permit using permit2
   error Permit2PermitFailed();
 
@@ -29,6 +32,7 @@ interface IKSZapRouterV3 {
   /// @notice Entry point for zap action
   function zap(ZapParams calldata zapParams)
     external
+    payable
     returns (bytes memory result, uint256 gasUsed);
 
   /// @notice Returns the address of who called the zap function
