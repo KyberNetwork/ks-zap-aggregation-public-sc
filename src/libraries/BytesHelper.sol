@@ -8,7 +8,7 @@ library BytesHelper {
     }
   }
 
-  function mloadInt256(bytes memory self, uint256 offset) internal pure returns (int256 value) {
+  function mloadBytes32(bytes memory self, uint256 offset) internal pure returns (bytes32 value) {
     assembly ("memory-safe") {
       value := mload(add(self, add(0x20, offset)))
     }

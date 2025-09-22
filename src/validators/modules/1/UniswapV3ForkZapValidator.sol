@@ -3,8 +3,9 @@ pragma solidity 0.8.30;
 
 import {IUniswapV3ForkZapValidator} from
   '../../../interfaces/validators/modules/1/IUniswapV3ForkZapValidator.sol';
-import {IUniswapV3NFT} from '../../../interfaces/vendors/uniswap-v3/IUniswapV3NFT.sol';
+
 import {BytesHelper} from '../../../libraries/BytesHelper.sol';
+import {IUniswapV3NFT} from '../../../vendors/uniswap-v3/IUniswapV3NFT.sol';
 
 import {CalldataDecoder} from 'ks-common-sc/src/libraries/calldata/CalldataDecoder.sol';
 
@@ -28,8 +29,8 @@ contract UniswapV3ForkZapValidator is IUniswapV3ForkZapValidator {
         abi.encodeCall(IUniswapV3NFT.positions, (beforeExecutionInput.tokenId))
       );
 
-      uint256 liquidityOffset = beforeExecutionInput.positionDataOffsets.at(2);
-      uint256 initialLiquidity = BytesHelper.mloadUint256(positionData, liquidityOffset * 32);
+      uint256 initialLiquidity =
+        BytesHelper.mloadUint256(positionData, beforeExecutionInput.liquidityOffset * 32);
 
       return abi.encode(initialLiquidity);
     }
@@ -47,7 +48,8 @@ contract UniswapV3ForkZapValidator is IUniswapV3ForkZapValidator {
 
     ZapInUniswapV3ForkAfterExecutionInput calldata afterExecutionInput;
     assembly ("memory-safe") {
-      afterExecutionInput := _afterExecutionInput.offset
+      afterExecutionInput :=
+        add(_afterExecutionInput.offset, calldataload(_afterExecutionInput.offset))
     }
 
     uint256 tokenId = beforeExecutionInput.tokenId;
@@ -60,20 +62,22 @@ contract UniswapV3ForkZapValidator is IUniswapV3ForkZapValidator {
     if (tokenId == 0) {
       uint256 totalSupply = _beforeExecutionOutput.decodeUint256();
       tokenId = IUniswapV3NFT(beforeExecutionInput.posManager).tokenByIndex(totalSupply);
-
-      uint256 tickLowerOffset = beforeExecutionInput.positionDataOffsets.at(0);
-      int256 tickLower = BytesHelper.mloadInt256(positionData, tickLowerOffset * 32);
-      require(tickLower == afterExecutionInput.tickLower, ZapInUniswapV3ForkInvalidTickRange());
-
-      uint256 tickUpperOffset = beforeExecutionInput.positionDataOffsets.at(1);
-      int256 tickUpper = BytesHelper.mloadInt256(positionData, tickUpperOffset * 32);
-      require(tickUpper == afterExecutionInput.tickUpper, ZapInUniswapV3ForkInvalidTickRange());
     } else {
       initialLiquidity = _beforeExecutionOutput.decodeUint256();
     }
 
-    uint256 liquidityOffset = beforeExecutionInput.positionDataOffsets.at(2);
-    uint256 currentLiquidity = BytesHelper.mloadUint256(positionData, liquidityOffset * 32);
+    for (uint256 offset = 0; offset * 32 < positionData.length; offset++) {
+      if (afterExecutionInput.needCheckFields.at(offset)) {
+        bytes32 expected =
+          BytesHelper.mloadBytes32(afterExecutionInput.expectedPositionData, offset * 32);
+        bytes32 actual = BytesHelper.mloadBytes32(positionData, offset * 32);
+
+        require(expected == actual, ZapInUniswapV3ForkInvalidPositionData());
+      }
+    }
+
+    uint256 currentLiquidity =
+      BytesHelper.mloadUint256(positionData, beforeExecutionInput.liquidityOffset * 32);
     require(
       currentLiquidity >= initialLiquidity + afterExecutionInput.minLiquidity,
       ZapInUniswapV3ForkInsufficientLiquidity()
@@ -107,8 +111,8 @@ contract UniswapV3ForkZapValidator is IUniswapV3ForkZapValidator {
       abi.encodeCall(IUniswapV3NFT.positions, (beforeExecutionInput.tokenId))
     );
 
-    uint256 liquidityOffset = beforeExecutionInput.positionDataOffsets.at(2);
-    uint256 currentLiquidity = BytesHelper.mloadUint256(positionData, liquidityOffset * 32);
+    uint256 currentLiquidity =
+      BytesHelper.mloadUint256(positionData, beforeExecutionInput.liquidityOffset * 32);
     require(
       currentLiquidity + afterExecutionInput.liquidityRemoved == initialLiquidity,
       RemoveUniswapV3ForkInvalidLiquidity()

@@ -4,7 +4,7 @@ pragma solidity ^0.8.0;
 import {ISolidlyV3ZapValidator} from
   '../../../interfaces/validators/modules/1/ISolidlyV3ZapValidator.sol';
 
-import {ISolidlyV3Pool} from '../../../interfaces/vendors/solidly-v3/ISolidlyV3Pool.sol';
+import {ISolidlyV3Pool} from '../../../vendors/solidly-v3/ISolidlyV3Pool.sol';
 
 import {CalldataDecoder} from 'ks-common-sc/src/libraries/calldata/CalldataDecoder.sol';
 

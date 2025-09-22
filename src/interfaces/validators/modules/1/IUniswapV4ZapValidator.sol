@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+import {PositionInfo} from '../../../../vendors/uniswap-v4/Types.sol';
+
 interface IUniswapV4ZapValidator {
   error ZapInUniswapV4InsufficientLiquidity();
-  error ZapInUniswapV4InvalidTickRange();
+  error ZapInUniswapV4InvalidPositionInfo();
   error UniswapV4InvalidPositionOwner();
   error RemoveUniswapV4InvalidLiquidity();
 
@@ -13,8 +15,7 @@ interface IUniswapV4ZapValidator {
   }
 
   struct ZapInUniswapV4AfterExecutionInput {
-    int24 tickLower;
-    int24 tickUpper;
+    PositionInfo expectedPositionInfo;
     uint256 minLiquidity;
     address recipient;
   }

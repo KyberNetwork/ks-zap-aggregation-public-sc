@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {PackedU8} from '../../../../types/PackedU8.sol';
+import {PackedBits} from '../../../../types/PackedBits.sol';
 
 interface IUniswapV3ForkZapValidator {
-  error ZapInUniswapV3ForkInvalidTickRange();
+  error ZapInUniswapV3ForkInvalidPositionData();
   error ZapInUniswapV3ForkInsufficientLiquidity();
   error UniswapV3ForkInvalidPositionOwner();
   error RemoveUniswapV3ForkInvalidLiquidity();
@@ -12,12 +12,12 @@ interface IUniswapV3ForkZapValidator {
   struct UniswapV3ForkBeforeExecutionInput {
     address posManager;
     uint256 tokenId;
-    PackedU8 positionDataOffsets;
+    uint256 liquidityOffset;
   }
 
   struct ZapInUniswapV3ForkAfterExecutionInput {
-    int256 tickLower;
-    int256 tickUpper;
+    bytes expectedPositionData;
+    PackedBits needCheckFields;
     uint256 minLiquidity;
     address recipient;
   }

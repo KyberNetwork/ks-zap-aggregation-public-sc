@@ -3,10 +3,7 @@ pragma solidity ^0.8.0;
 
 import {IUniswapV4ZapValidator} from
   '../../../interfaces/validators/modules/1/IUniswapV4ZapValidator.sol';
-import {
-  IPositionManager,
-  PositionInfo
-} from '../../../interfaces/vendors/uniswap-v4/IPositionManager.sol';
+import {IPositionManager, PositionInfo} from '../../../vendors/uniswap-v4/IPositionManager.sol';
 
 import {CalldataDecoder} from 'ks-common-sc/src/libraries/calldata/CalldataDecoder.sol';
 
@@ -51,30 +48,21 @@ contract UniswapV4ZapValidator is IUniswapV4ZapValidator {
 
     uint256 tokenId = beforeExecutionInput.tokenId;
     uint256 initialLiquidity;
-
     if (tokenId == 0) {
       tokenId = _beforeExecutionOutput.decodeUint256();
-
-      int24 tickLower;
-      int24 tickUpper;
-      (, PositionInfo info) =
-        IPositionManager(beforeExecutionInput.posManager).getPoolAndPositionInfo(tokenId);
-      assembly ("memory-safe") {
-        tickLower := signextend(2, shr(8, info))
-        tickUpper := signextend(2, shr(32, info))
-      }
-
-      require(
-        tickLower == afterExecutionInput.tickLower && tickUpper == afterExecutionInput.tickUpper,
-        ZapInUniswapV4InvalidTickRange()
-      );
     } else {
       initialLiquidity = _beforeExecutionOutput.decodeUint256();
     }
 
+    (, PositionInfo info) =
+      IPositionManager(beforeExecutionInput.posManager).getPoolAndPositionInfo(tokenId);
+    require(
+      PositionInfo.unwrap(info) == PositionInfo.unwrap(afterExecutionInput.expectedPositionInfo),
+      ZapInUniswapV4InvalidPositionInfo()
+    );
+
     uint256 currentLiquidity =
       IPositionManager(beforeExecutionInput.posManager).getPositionLiquidity(tokenId);
-
     require(
       currentLiquidity >= initialLiquidity + afterExecutionInput.minLiquidity,
       ZapInUniswapV4InsufficientLiquidity()

@@ -3,8 +3,10 @@ pragma solidity ^0.8.0;
 
 import {IPancakeInfinityZapValidator} from
   '../../../interfaces/validators/modules/1/IPancakeInfinityZapValidator.sol';
-import {ICLPositionManager} from
-  '../../../interfaces/vendors/pancake-infinity/ICLPositionManager.sol';
+import {
+  CLPositionInfo,
+  ICLPositionManager
+} from '../../../vendors/pancake-infinity/ICLPositionManager.sol';
 
 import {CalldataDecoder} from 'ks-common-sc/src/libraries/calldata/CalldataDecoder.sol';
 
@@ -49,30 +51,21 @@ contract PancakeInfinityZapValidator is IPancakeInfinityZapValidator {
 
     uint256 tokenId = beforeExecutionInput.tokenId;
     uint256 initialLiquidity;
-    uint256 currentLiquidity;
-
     if (tokenId == 0) {
       tokenId = _beforeExecutionOutput.decodeUint256();
-
-      int24 tickLower;
-      int24 tickUpper;
-      (, tickLower, tickUpper, currentLiquidity,,,) =
-        ICLPositionManager(beforeExecutionInput.posManager).positions(tokenId);
-      assembly ("memory-safe") {
-        tickLower := signextend(2, tickLower)
-        tickUpper := signextend(2, tickUpper)
-      }
-
-      require(
-        tickLower == afterExecutionInput.tickLower && tickUpper == afterExecutionInput.tickUpper,
-        ZapInPancakeInfinityInvalidTickRange()
-      );
     } else {
       initialLiquidity = _beforeExecutionOutput.decodeUint256();
-      currentLiquidity =
-        ICLPositionManager(beforeExecutionInput.posManager).getPositionLiquidity(tokenId);
     }
 
+    (, CLPositionInfo info) =
+      ICLPositionManager(beforeExecutionInput.posManager).getPoolAndPositionInfo(tokenId);
+    require(
+      CLPositionInfo.unwrap(info) == CLPositionInfo.unwrap(afterExecutionInput.expectedPositionInfo),
+      ZapInPancakeInfinityInvalidPositionInfo()
+    );
+
+    uint256 currentLiquidity =
+      ICLPositionManager(beforeExecutionInput.posManager).getPositionLiquidity(tokenId);
     require(
       currentLiquidity >= initialLiquidity + afterExecutionInput.minLiquidity,
       ZapInPancakeInfinityInsufficientLiquidity()
@@ -101,10 +94,8 @@ contract PancakeInfinityZapValidator is IPancakeInfinityZapValidator {
     }
 
     uint256 initialLiquidity = _beforeExecutionOutput.decodeUint256();
-    uint256 currentLiquidity =
-      ICLPositionManager(beforeExecutionInput.posManager).getPositionLiquidity(
-        beforeExecutionInput.tokenId
-      );
+    uint256 currentLiquidity = ICLPositionManager(beforeExecutionInput.posManager)
+      .getPositionLiquidity(beforeExecutionInput.tokenId);
 
     require(
       currentLiquidity + afterExecutionInput.liquidityRemoved == initialLiquidity,
