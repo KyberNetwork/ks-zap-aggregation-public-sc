@@ -28,8 +28,7 @@ library ERC20ParamsLibrary {
   function collect(ERC20Params calldata self, address executor) internal returns (bool usePermit2) {
     if (self.token.isNative()) {
       require(msg.value >= self.amount, IKSZapRouterV3.NotEnoughMsgValue());
-    }
-    if (self.token.erc20Permit(msg.sender, self.permitData) || self.permitData.length == 0) {
+    } else if (self.token.erc20Permit(msg.sender, self.permitData) || self.permitData.length == 0) {
       self.token.safeTransferFrom(msg.sender, executor, self.amount);
     } else {
       return true;

@@ -6,6 +6,8 @@ import {IKSZapRouterV3} from './interfaces/IKSZapRouterV3.sol';
 
 import {ERC20Params} from './types/ERC20Params.sol';
 import {ERC721Params} from './types/ERC721Params.sol';
+
+import {ValidateParams} from './types/ValidateParams.sol';
 import {ZapParams} from './types/ZapParams.sol';
 
 import {IAllowanceTransfer} from 'ks-common-sc/src/interfaces/IAllowanceTransfer.sol';
@@ -14,12 +16,18 @@ import {Lock} from 'ks-common-sc/src/base/Lock.sol';
 import {ManagementBase} from 'ks-common-sc/src/base/ManagementBase.sol';
 import {ManagementPausable} from 'ks-common-sc/src/base/ManagementPausable.sol';
 import {ManagementRescuable} from 'ks-common-sc/src/base/ManagementRescuable.sol';
+
 import {KSRoles} from 'ks-common-sc/src/libraries/KSRoles.sol';
 
-import {CustomRevert} from 'ks-common-sc/src/libraries/CustomRevert.sol';
+import {Address} from 'openzeppelin-contracts/contracts/utils/Address.sol';
 
 contract KSZapRouterV3 is IKSZapRouterV3, Lock, ManagementPausable, ManagementRescuable {
+  using Address for address;
+
   address public immutable PERMIT2;
+
+  // keccak256('permit(address,((address,uint160,uint48,uint48)[],address,uint256),bytes)')
+  bytes4 constant PERMIT2_PERMIT_SELECTOR = 0x2a2d80d1;
 
   constructor(
     address initialAdmin,
@@ -42,26 +50,26 @@ contract KSZapRouterV3 is IKSZapRouterV3, Lock, ManagementPausable, ManagementRe
   {
     uint256 gasBefore = gasleft();
 
-    bytes[] memory beforeExecutionData = new bytes[](zapParams.validateParams.length);
-    for (uint256 i = 0; i < zapParams.validateParams.length; i++) {
-      beforeExecutionData[i] = zapParams.validateParams[i].beforeExecution();
-    }
+    bytes[] memory beforeExecutionData = _beforeExecution(zapParams.validateParams);
 
     bool[] memory usePermit2 = _collectERC20s(zapParams.erc20s, zapParams.executor);
     _collectERC721s(zapParams.erc721s, zapParams.executor);
 
-    _permit2Permit(zapParams.permit2Data);
+    if (zapParams.permit2Data.length > 0) {
+      PERMIT2.functionCall(abi.encodePacked(PERMIT2_PERMIT_SELECTOR, zapParams.permit2Data));
+    }
+
     _permit2TransferFrom(zapParams.erc20s, usePermit2, zapParams.executor);
 
-    result = _callExecutor(zapParams.executor, zapParams.executorData);
+    result = IKSZapExecutor(zapParams.executor).executeZap{value: msg.value}(zapParams.executorData);
 
-    for (uint256 i = 0; i < zapParams.validateParams.length; i++) {
-      zapParams.validateParams[i].afterExecution(beforeExecutionData[i]);
-    }
+    _afterExecution(zapParams.validateParams, beforeExecutionData);
 
     emit Zap(zapParams.erc20s, zapParams.erc721s, zapParams.validateParams, zapParams.executor);
 
-    emit ClientData(zapParams.clientData);
+    if (zapParams.clientData.length > 0) {
+      emit ClientData(zapParams.clientData);
+    }
 
     gasUsed = gasBefore - gasleft();
   }
@@ -69,18 +77,6 @@ contract KSZapRouterV3 is IKSZapRouterV3, Lock, ManagementPausable, ManagementRe
   /// @inheritdoc IKSZapRouterV3
   function msgSender() external view returns (address) {
     return _getLocker();
-  }
-
-  function _permit2Permit(bytes calldata permit2Data) internal {
-    if (permit2Data.length > 0) {
-      (bool success,) =
-        PERMIT2.call(abi.encodePacked(IAllowanceTransfer.permit.selector, permit2Data));
-      if (!success) {
-        CustomRevert.bubbleUpAndRevertWith(
-          PERMIT2, IAllowanceTransfer.permit.selector, Permit2PermitFailed.selector
-        );
-      }
-    }
   }
 
   function _permit2TransferFrom(
@@ -109,12 +105,29 @@ contract KSZapRouterV3 is IKSZapRouterV3, Lock, ManagementPausable, ManagementRe
         mstore(details, detailsLength)
       }
 
-      (bool success,) = PERMIT2.call(abi.encodeCall(IAllowanceTransfer.transferFrom, details));
-      if (!success) {
-        CustomRevert.bubbleUpAndRevertWith(
-          PERMIT2, IAllowanceTransfer.transferFrom.selector, Permit2TransferFromFailed.selector
-        );
-      }
+      IAllowanceTransfer(PERMIT2).transferFrom(details);
+    }
+  }
+
+  function _beforeExecution(ValidateParams[] calldata validateParams)
+    internal
+    view
+    returns (bytes[] memory)
+  {
+    bytes[] memory beforeExecutionData = new bytes[](validateParams.length);
+    for (uint256 i = 0; i < validateParams.length; i++) {
+      beforeExecutionData[i] = validateParams[i].beforeExecution();
+    }
+
+    return beforeExecutionData;
+  }
+
+  function _afterExecution(
+    ValidateParams[] calldata validateParams,
+    bytes[] memory beforeExecutionData
+  ) internal view {
+    for (uint256 i = 0; i < validateParams.length; i++) {
+      validateParams[i].afterExecution(beforeExecutionData[i]);
     }
   }
 
@@ -131,20 +144,6 @@ contract KSZapRouterV3 is IKSZapRouterV3, Lock, ManagementPausable, ManagementRe
   function _collectERC721s(ERC721Params[] calldata erc721s, address executor) internal {
     for (uint256 i = 0; i < erc721s.length; i++) {
       erc721s[i].collect(executor);
-    }
-  }
-
-  function _callExecutor(address executor, bytes calldata executorData)
-    internal
-    returns (bytes memory result)
-  {
-    bool success;
-    (success, result) =
-      executor.call{value: msg.value}(abi.encodeCall(IKSZapExecutor.executeZap, executorData));
-    if (!success) {
-      CustomRevert.bubbleUpAndRevertWith(
-        executor, IKSZapExecutor.executeZap.selector, CallExecutorFailed.selector
-      );
     }
   }
 }

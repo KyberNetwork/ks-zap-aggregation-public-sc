@@ -25,6 +25,6 @@ library ERC721ParamsLibrary {
 
   function collect(ERC721Params calldata self, address executor) internal {
     self.token.erc721Permit(self.tokenId, self.permitData);
-    IERC721(self.token).safeTransferFrom(msg.sender, executor, self.tokenId);
+    IERC721(self.token).transferFrom(msg.sender, executor, self.tokenId);
   }
 }
