@@ -57,7 +57,7 @@ contract UniswapV4ZapValidator is IUniswapV4ZapValidator {
     (, PositionInfo info) =
       IPositionManager(beforeExecutionInput.posManager).getPoolAndPositionInfo(tokenId);
     require(
-      PositionInfo.unwrap(info) == PositionInfo.unwrap(afterExecutionInput.expectedPositionInfo),
+      PositionInfo.unwrap(info) == afterExecutionInput.expectedPositionInfo,
       ZapInUniswapV4InvalidPositionInfo()
     );
 

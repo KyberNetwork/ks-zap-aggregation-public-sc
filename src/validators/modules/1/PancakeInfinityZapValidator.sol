@@ -60,7 +60,7 @@ contract PancakeInfinityZapValidator is IPancakeInfinityZapValidator {
     (, CLPositionInfo info) =
       ICLPositionManager(beforeExecutionInput.posManager).getPoolAndPositionInfo(tokenId);
     require(
-      CLPositionInfo.unwrap(info) == CLPositionInfo.unwrap(afterExecutionInput.expectedPositionInfo),
+      CLPositionInfo.unwrap(info) == afterExecutionInput.expectedPositionInfo,
       ZapInPancakeInfinityInvalidPositionInfo()
     );
 

@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {CLPositionInfo} from '../../../../vendors/pancake-infinity/Types.sol';
-
 interface IPancakeInfinityZapValidator {
   error ZapInPancakeInfinityInsufficientLiquidity();
   error ZapInPancakeInfinityInvalidPositionInfo();
@@ -15,7 +13,7 @@ interface IPancakeInfinityZapValidator {
   }
 
   struct ZapInPancakeInfinityAfterExecutionInput {
-    CLPositionInfo expectedPositionInfo;
+    uint256 expectedPositionInfo;
     uint256 minLiquidity;
     address recipient;
   }
