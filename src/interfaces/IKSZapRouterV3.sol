@@ -6,6 +6,7 @@ import {ERC721Params} from '../types/ERC721Params.sol';
 import {ValidateParams} from '../types/ValidateParams.sol';
 import {ZapParams} from '../types/ZapParams.sol';
 
+/// @notice Interface for the KS Zap Router V3
 interface IKSZapRouterV3 {
   /// @notice Thrown when the deadline is passed
   error DeadlinePassed(uint256 deadline, uint256 blockTimestamp);

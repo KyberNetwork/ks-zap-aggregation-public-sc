@@ -4,6 +4,7 @@ pragma solidity ^0.8.0;
 import {IKSZapValidatorV3} from '../interfaces/IKSZapValidatorV3.sol';
 
 abstract contract KSZapValidatorV3Base is IKSZapValidatorV3 {
+  /// @inheritdoc IKSZapValidatorV3
   function beforeExecution(bytes32 zapType, bytes calldata _beforeExecutionInput)
     external
     view
@@ -12,6 +13,7 @@ abstract contract KSZapValidatorV3Base is IKSZapValidatorV3 {
     return getBeforeExecutionHandler(zapType)(_beforeExecutionInput);
   }
 
+  /// @inheritdoc IKSZapValidatorV3
   function afterExecution(
     bytes32 zapType,
     bytes calldata _beforeExecutionInput,

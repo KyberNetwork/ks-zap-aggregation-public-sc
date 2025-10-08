@@ -25,6 +25,7 @@ library ERC20ParamsLibrary {
   using TokenHelper for address;
   using PermitHelper for address;
 
+  /// @notice Collects the ERC20 token from the sender to the executor
   function collect(ERC20Params calldata self, address executor) internal returns (bool usePermit2) {
     if (self.token.isNative()) {
       require(msg.value >= self.amount, IKSZapRouterV3.NotEnoughMsgValue());

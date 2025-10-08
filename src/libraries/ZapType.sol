@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+/// @notice Contains the zap types
 library ZapType {
   bytes32 internal constant ZapInUniswapV3Fork = keccak256('ZapInUniswapV3Fork');
   bytes32 internal constant RemoveUniswapV3Fork = keccak256('RemoveUniswapV3Fork');

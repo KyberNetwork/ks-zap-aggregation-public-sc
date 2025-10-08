@@ -23,6 +23,7 @@ using ERC721ParamsLibrary for ERC721Params global;
 library ERC721ParamsLibrary {
   using PermitHelper for address;
 
+  /// @notice Collects the ERC721 token from the sender to the executor
   function collect(ERC721Params calldata self, address executor) internal {
     self.token.erc721Permit(self.tokenId, self.permitData);
     IERC721(self.token).transferFrom(msg.sender, executor, self.tokenId);

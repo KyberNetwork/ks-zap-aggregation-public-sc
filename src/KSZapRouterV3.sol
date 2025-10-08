@@ -79,6 +79,7 @@ contract KSZapRouterV3 is IKSZapRouterV3, Lock, ManagementPausable, ManagementRe
     return _getLocker();
   }
 
+  /// @dev Transfers the ERC20 tokens from the sender to the executor using permit2
   function _permit2TransferFrom(
     ERC20Params[] calldata erc20s,
     bool[] memory usePermit2,
@@ -109,6 +110,7 @@ contract KSZapRouterV3 is IKSZapRouterV3, Lock, ManagementPausable, ManagementRe
     }
   }
 
+  /// @dev Returns the state before execution
   function _beforeExecution(ValidateParams[] calldata validateParams)
     internal
     view
@@ -122,6 +124,7 @@ contract KSZapRouterV3 is IKSZapRouterV3, Lock, ManagementPausable, ManagementRe
     return beforeExecutionData;
   }
 
+  /// @dev Validates the current state after execution against the before execution state
   function _afterExecution(
     ValidateParams[] calldata validateParams,
     bytes[] memory beforeExecutionData
@@ -131,6 +134,7 @@ contract KSZapRouterV3 is IKSZapRouterV3, Lock, ManagementPausable, ManagementRe
     }
   }
 
+  /// @dev Collects the ERC20 tokens from the sender to the executor
   function _collectERC20s(ERC20Params[] calldata erc20s, address executor)
     internal
     returns (bool[] memory usePermit2)
@@ -141,6 +145,7 @@ contract KSZapRouterV3 is IKSZapRouterV3, Lock, ManagementPausable, ManagementRe
     }
   }
 
+  /// @dev Collects the ERC721 tokens from the sender to the executor
   function _collectERC721s(ERC721Params[] calldata erc721s, address executor) internal {
     for (uint256 i = 0; i < erc721s.length; i++) {
       erc721s[i].collect(executor);
