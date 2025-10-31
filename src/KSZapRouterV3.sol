@@ -10,12 +10,12 @@ import {ERC721Params} from './types/ERC721Params.sol';
 import {ValidateParams} from './types/ValidateParams.sol';
 import {ZapParams} from './types/ZapParams.sol';
 
-import {IAllowanceTransfer} from 'ks-common-sc/src/interfaces/IAllowanceTransfer.sol';
-
 import {Lock} from 'ks-common-sc/src/base/Lock.sol';
 import {ManagementBase} from 'ks-common-sc/src/base/ManagementBase.sol';
 import {ManagementPausable} from 'ks-common-sc/src/base/ManagementPausable.sol';
 import {ManagementRescuable} from 'ks-common-sc/src/base/ManagementRescuable.sol';
+import {IAllowanceTransfer} from 'ks-common-sc/src/interfaces/IAllowanceTransfer.sol';
+import {PermitHelper} from 'ks-common-sc/src/libraries/token/PermitHelper.sol';
 
 import {KSRoles} from 'ks-common-sc/src/libraries/KSRoles.sol';
 
@@ -24,7 +24,7 @@ import {Address} from 'openzeppelin-contracts/contracts/utils/Address.sol';
 contract KSZapRouterV3 is IKSZapRouterV3, Lock, ManagementPausable, ManagementRescuable {
   using Address for address;
 
-  address public immutable PERMIT2;
+  IAllowanceTransfer public immutable PERMIT2;
 
   // keccak256('permit(address,((address,uint160,uint48,uint48)[],address,uint256),bytes)')
   bytes4 constant PERMIT2_PERMIT_SELECTOR = 0x2a2d80d1;
@@ -38,7 +38,7 @@ contract KSZapRouterV3 is IKSZapRouterV3, Lock, ManagementPausable, ManagementRe
     _batchGrantRole(KSRoles.GUARDIAN_ROLE, initialGuardians);
     _batchGrantRole(KSRoles.RESCUER_ROLE, initialRescuers);
 
-    PERMIT2 = permit2;
+    PERMIT2 = IAllowanceTransfer(permit2);
   }
 
   /// @inheritdoc IKSZapRouterV3
@@ -55,10 +55,7 @@ contract KSZapRouterV3 is IKSZapRouterV3, Lock, ManagementPausable, ManagementRe
     bool[] memory usePermit2 = _collectERC20s(zapParams.erc20s, zapParams.executor);
     _collectERC721s(zapParams.erc721s, zapParams.executor);
 
-    if (zapParams.permit2Data.length > 0) {
-      PERMIT2.functionCall(abi.encodePacked(PERMIT2_PERMIT_SELECTOR, zapParams.permit2Data));
-    }
-
+    PermitHelper.callPermit2(PERMIT2, msg.sender, zapParams.permit2Data);
     _permit2TransferFrom(zapParams.erc20s, usePermit2, zapParams.executor);
 
     result = IKSZapExecutor(zapParams.executor).executeZap{value: msg.value}(zapParams.executorData);
@@ -92,21 +89,18 @@ contract KSZapRouterV3 is IKSZapRouterV3, Lock, ManagementPausable, ManagementRe
     for (uint256 i = 0; i < erc20s.length; i++) {
       if (usePermit2[i]) {
         details[detailsLength++] = IAllowanceTransfer.AllowanceTransferDetails({
-          from: msg.sender,
-          to: executor,
-          amount: uint160(erc20s[i].amount),
-          token: erc20s[i].token
+          from: msg.sender, to: executor, amount: uint160(erc20s[i].amount), token: erc20s[i].token
         });
       }
     }
 
     if (detailsLength > 0) {
       // Set the correct length of the details array
-      assembly ("memory-safe") {
+      assembly ('memory-safe') {
         mstore(details, detailsLength)
       }
 
-      IAllowanceTransfer(PERMIT2).transferFrom(details);
+      PERMIT2.transferFrom(details);
     }
   }
 

@@ -27,12 +27,22 @@ library ERC20ParamsLibrary {
 
   /// @notice Collects the ERC20 token from the sender to the executor
   function collect(ERC20Params calldata self, address executor) internal returns (bool usePermit2) {
-    if (self.token.isNative()) {
-      require(msg.value >= self.amount, IKSZapRouterV3.NotEnoughMsgValue());
-    } else if (self.token.erc20Permit(msg.sender, self.permitData) || self.permitData.length == 0) {
-      self.token.safeTransferFrom(msg.sender, executor, self.amount);
-    } else {
+    // if (self.token.isNative()) {
+    //   require(msg.value == self.amount, IKSZapRouterV3.InvalidMsgValue());
+    // } else if (self.token.erc20Permit(msg.sender, self.permitData) || self.permitData.length == 0) {
+    //   self.token.safeTransferFrom(msg.sender, executor, self.amount);
+    // } else {
+    //   return true;
+    // }
+    if (self.permitData.length == 0) {
       return true;
+    }
+
+    if (self.token.isNative()) {
+      require(msg.value == self.amount, IKSZapRouterV3.InvalidMsgValue(self.amount, msg.value));
+    } else {
+      self.token.callERC20Permit(msg.sender, self.permitData);
+      self.token.safeTransferFrom(msg.sender, executor, self.amount);
     }
   }
 }

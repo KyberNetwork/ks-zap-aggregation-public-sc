@@ -25,7 +25,7 @@ library ERC721ParamsLibrary {
 
   /// @notice Collects the ERC721 token from the sender to the executor
   function collect(ERC721Params calldata self, address executor) internal {
-    self.token.erc721Permit(self.tokenId, self.permitData);
+    self.token.callERC721Permit(self.tokenId, self.permitData);
     IERC721(self.token).transferFrom(msg.sender, executor, self.tokenId);
   }
 }
