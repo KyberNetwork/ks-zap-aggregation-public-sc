@@ -9,11 +9,13 @@ import {IERC721} from 'openzeppelin-contracts/contracts/interfaces/IERC721.sol';
  * @notice Params structure for ERC721 token
  * @param token The address of the ERC721 token
  * @param tokenId The ID of the ERC721 token
+ * @param target The address to transfer the ERC721 token to
  * @param permitData The permit data for the ERC721 token
  */
 struct ERC721Params {
   address token;
   uint256 tokenId;
+  address target;
   bytes permitData;
 }
 
@@ -23,9 +25,9 @@ using ERC721ParamsLibrary for ERC721Params global;
 library ERC721ParamsLibrary {
   using PermitHelper for address;
 
-  /// @notice Collects the ERC721 token from the sender to the executor
-  function collect(ERC721Params calldata self, address executor) internal {
+  /// @notice Collects the ERC721 token from the sender to the target
+  function collect(ERC721Params calldata self) internal {
     self.token.callERC721Permit(self.tokenId, self.permitData);
-    IERC721(self.token).transferFrom(msg.sender, executor, self.tokenId);
+    IERC721(self.token).transferFrom(msg.sender, self.target, self.tokenId);
   }
 }

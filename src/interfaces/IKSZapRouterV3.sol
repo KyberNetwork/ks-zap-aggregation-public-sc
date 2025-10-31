@@ -14,9 +14,6 @@ interface IKSZapRouterV3 {
   /// @notice Thrown when failed to call the executor
   error CallExecutorFailed();
 
-  /// @notice Thrown when the msg.value is invalid
-  error InvalidMsgValue(uint256 expected, uint256 actual);
-
   /// @notice Thrown when failed to permit using permit2
   error Permit2PermitFailed();
 

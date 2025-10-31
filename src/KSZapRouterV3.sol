@@ -15,19 +15,11 @@ import {ManagementBase} from 'ks-common-sc/src/base/ManagementBase.sol';
 import {ManagementPausable} from 'ks-common-sc/src/base/ManagementPausable.sol';
 import {ManagementRescuable} from 'ks-common-sc/src/base/ManagementRescuable.sol';
 import {IAllowanceTransfer} from 'ks-common-sc/src/interfaces/IAllowanceTransfer.sol';
+import {KSRoles} from 'ks-common-sc/src/libraries/KSRoles.sol';
 import {PermitHelper} from 'ks-common-sc/src/libraries/token/PermitHelper.sol';
 
-import {KSRoles} from 'ks-common-sc/src/libraries/KSRoles.sol';
-
-import {Address} from 'openzeppelin-contracts/contracts/utils/Address.sol';
-
 contract KSZapRouterV3 is IKSZapRouterV3, Lock, ManagementPausable, ManagementRescuable {
-  using Address for address;
-
   IAllowanceTransfer public immutable PERMIT2;
-
-  // keccak256('permit(address,((address,uint160,uint48,uint48)[],address,uint256),bytes)')
-  bytes4 constant PERMIT2_PERMIT_SELECTOR = 0x2a2d80d1;
 
   constructor(
     address initialAdmin,
@@ -52,13 +44,14 @@ contract KSZapRouterV3 is IKSZapRouterV3, Lock, ManagementPausable, ManagementRe
 
     bytes[] memory beforeExecutionData = _beforeExecution(zapParams.validateParams);
 
-    bool[] memory usePermit2 = _collectERC20s(zapParams.erc20s, zapParams.executor);
-    _collectERC721s(zapParams.erc721s, zapParams.executor);
+    _collectERC20s(zapParams.erc20s);
+    _collectERC721s(zapParams.erc721s);
 
-    PermitHelper.callPermit2(PERMIT2, msg.sender, zapParams.permit2Data);
-    _permit2TransferFrom(zapParams.erc20s, usePermit2, zapParams.executor);
+    if (zapParams.permit2Data.length > 0) {
+      PermitHelper.callPermit2(PERMIT2, msg.sender, zapParams.permit2Data);
+    }
 
-    result = IKSZapExecutor(zapParams.executor).executeZap{value: msg.value}(zapParams.executorData);
+    result = IKSZapExecutor(zapParams.executor).executeZap(zapParams.executorData);
 
     _afterExecution(zapParams.validateParams, beforeExecutionData);
 
@@ -68,40 +61,14 @@ contract KSZapRouterV3 is IKSZapRouterV3, Lock, ManagementPausable, ManagementRe
       emit ClientData(zapParams.clientData);
     }
 
-    gasUsed = gasBefore - gasleft();
+    unchecked {
+      gasUsed = gasBefore - gasleft();
+    }
   }
 
   /// @inheritdoc IKSZapRouterV3
   function msgSender() external view returns (address) {
     return _getLocker();
-  }
-
-  /// @dev Transfers the ERC20 tokens from the sender to the executor using permit2
-  function _permit2TransferFrom(
-    ERC20Params[] calldata erc20s,
-    bool[] memory usePermit2,
-    address executor
-  ) internal {
-    IAllowanceTransfer.AllowanceTransferDetails[] memory details =
-      new IAllowanceTransfer.AllowanceTransferDetails[](erc20s.length);
-    uint256 detailsLength = 0;
-
-    for (uint256 i = 0; i < erc20s.length; i++) {
-      if (usePermit2[i]) {
-        details[detailsLength++] = IAllowanceTransfer.AllowanceTransferDetails({
-          from: msg.sender, to: executor, amount: uint160(erc20s[i].amount), token: erc20s[i].token
-        });
-      }
-    }
-
-    if (detailsLength > 0) {
-      // Set the correct length of the details array
-      assembly ('memory-safe') {
-        mstore(details, detailsLength)
-      }
-
-      PERMIT2.transferFrom(details);
-    }
   }
 
   /// @dev Returns the state before execution
@@ -129,20 +96,16 @@ contract KSZapRouterV3 is IKSZapRouterV3, Lock, ManagementPausable, ManagementRe
   }
 
   /// @dev Collects the ERC20 tokens from the sender to the executor
-  function _collectERC20s(ERC20Params[] calldata erc20s, address executor)
-    internal
-    returns (bool[] memory usePermit2)
-  {
-    usePermit2 = new bool[](erc20s.length);
+  function _collectERC20s(ERC20Params[] calldata erc20s) internal {
     for (uint256 i = 0; i < erc20s.length; i++) {
-      usePermit2[i] = erc20s[i].collect(executor);
+      erc20s[i].collect(PERMIT2);
     }
   }
 
   /// @dev Collects the ERC721 tokens from the sender to the executor
-  function _collectERC721s(ERC721Params[] calldata erc721s, address executor) internal {
+  function _collectERC721s(ERC721Params[] calldata erc721s) internal {
     for (uint256 i = 0; i < erc721s.length; i++) {
-      erc721s[i].collect(executor);
+      erc721s[i].collect();
     }
   }
 }
