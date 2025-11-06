@@ -6,13 +6,13 @@ import {IKSZapValidatorV3} from '../interfaces/IKSZapValidatorV3.sol';
 /**
  * @notice Params structure for validation
  * @param validator The address of the validator
- * @param zapType The type of zap action
+ * @param zapAction The type of zap action
  * @param beforeExecutionInput The input for before execution
  * @param afterExecutionInput The input for after execution
  */
 struct ValidateParams {
   address validator;
-  bytes32 zapType;
+  bytes32 zapAction;
   bytes beforeExecutionInput;
   bytes afterExecutionInput;
 }
@@ -24,7 +24,7 @@ library ValidateParamsLibrary {
   /// @notice Returns the state before execution
   function beforeExecution(ValidateParams calldata self) internal view returns (bytes memory) {
     return
-      IKSZapValidatorV3(self.validator).beforeExecution(self.zapType, self.beforeExecutionInput);
+      IKSZapValidatorV3(self.validator).beforeExecution(self.zapAction, self.beforeExecutionInput);
   }
 
   /// @notice Validates the current state after execution against the before execution state
@@ -32,8 +32,9 @@ library ValidateParamsLibrary {
     internal
     view
   {
-    IKSZapValidatorV3(self.validator).afterExecution(
-      self.zapType, self.beforeExecutionInput, beforeExecutionOutput, self.afterExecutionInput
-    );
+    IKSZapValidatorV3(self.validator)
+      .afterExecution(
+        self.zapAction, self.beforeExecutionInput, beforeExecutionOutput, self.afterExecutionInput
+      );
   }
 }
