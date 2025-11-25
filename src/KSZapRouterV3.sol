@@ -74,7 +74,6 @@ contract KSZapRouterV3 is IKSZapRouterV3, Lock, ManagementPausable, ManagementRe
   /// @dev Returns the state before execution
   function _beforeExecution(ValidateParams[] calldata validateParams)
     internal
-    view
     returns (bytes[] memory)
   {
     bytes[] memory beforeExecutionData = new bytes[](validateParams.length);
@@ -89,7 +88,7 @@ contract KSZapRouterV3 is IKSZapRouterV3, Lock, ManagementPausable, ManagementRe
   function _afterExecution(
     ValidateParams[] calldata validateParams,
     bytes[] memory beforeExecutionData
-  ) internal view {
+  ) internal {
     for (uint256 i = 0; i < validateParams.length; i++) {
       validateParams[i].afterExecution(beforeExecutionData[i]);
     }

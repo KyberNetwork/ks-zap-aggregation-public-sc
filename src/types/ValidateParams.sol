@@ -22,7 +22,7 @@ using ValidateParamsLibrary for ValidateParams global;
 /// @notice Contains functions for processing validate params
 library ValidateParamsLibrary {
   /// @notice Returns the state before execution
-  function beforeExecution(ValidateParams calldata self) internal view returns (bytes memory) {
+  function beforeExecution(ValidateParams calldata self) internal returns (bytes memory) {
     return
       IKSZapValidatorV3(self.validator).beforeExecution(self.zapAction, self.beforeExecutionInput);
   }
@@ -30,7 +30,6 @@ library ValidateParamsLibrary {
   /// @notice Validates the current state after execution against the before execution state
   function afterExecution(ValidateParams calldata self, bytes memory beforeExecutionOutput)
     internal
-    view
   {
     IKSZapValidatorV3(self.validator)
       .afterExecution(

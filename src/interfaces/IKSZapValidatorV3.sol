@@ -9,7 +9,6 @@ interface IKSZapValidatorV3 {
   /// @notice Returns the state before execution
   function beforeExecution(bytes32 zapAction, bytes calldata _beforeExecutionInput)
     external
-    view
     returns (bytes memory beforeExecutionOutput);
 
   /// @notice Validates the current state after execution against the before execution state
@@ -18,5 +17,5 @@ interface IKSZapValidatorV3 {
     bytes calldata _beforeExecutionInput,
     bytes calldata beforeExecutionOutput,
     bytes calldata _afterExecutionInput
-  ) external view;
+  ) external;
 }
