@@ -44,12 +44,12 @@ contract KSZapRouterV3 is IKSZapRouterV3, Lock, ManagementPausable, ManagementRe
 
     bytes[] memory beforeExecutionData = _beforeExecution(zapParams.validateParams);
 
-    _collectERC20s(zapParams.erc20s);
-    _collectERC721s(zapParams.erc721s);
-
     if (zapParams.permit2Data.length > 0) {
       PermitHelper.callPermit2(PERMIT2, msg.sender, zapParams.permit2Data);
     }
+
+    _collectERC20s(zapParams.erc20s);
+    _collectERC721s(zapParams.erc721s);
 
     result = IKSZapExecutor(zapParams.executor).executeZap(zapParams.executorData);
 
