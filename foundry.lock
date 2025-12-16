@@ -1,0 +1,8 @@
+{
+  "lib/ks-allowance-hub": {
+    "rev": "132b1f4da5e759de44ff8645e813aec119ae3705"
+  },
+  "lib/ks-common-sc": {
+    "rev": "c1532e7cba2302f133578de3c9a4392197db66ac"
+  }
+}
