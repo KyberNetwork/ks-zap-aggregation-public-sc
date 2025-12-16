@@ -54,7 +54,7 @@ contract KSZapRouterV3 is
 
     bytes[] memory beforeExecutionData = _beforeExecution(zapParams.validateParams);
 
-    result = IKSZapExecutor(zapParams.executor).executeZap(zapParams.executorData);
+    result = IKSZapExecutor(zapParams.executor).executeZap{value: msg.value}(zapParams.executorData);
 
     _afterExecution(zapParams.validateParams, beforeExecutionData);
 
