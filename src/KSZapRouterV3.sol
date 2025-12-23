@@ -38,7 +38,7 @@ contract KSZapRouterV3 is
 
   /**
    * @notice Called by the allowance hub to swap and then bridge the tokens.
-   * @param data The encoded data of `SwapAndBridgeParams` struct.
+   * @param data The encoded data of `ZapParams` struct.
    */
   function ksExecute(bytes calldata data)
     external

@@ -4,7 +4,7 @@ pragma solidity ^0.8.0;
 import {IKSZapValidatorV3} from '../interfaces/IKSZapValidatorV3.sol';
 
 /**
- * @notice Params structure for validation
+ * @notice Parameters for validation
  * @param validator The address of the validator
  * @param zapAction The type of zap action
  * @param beforeExecutionInput The input for before execution
