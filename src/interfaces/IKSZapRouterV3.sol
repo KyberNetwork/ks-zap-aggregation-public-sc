@@ -2,7 +2,6 @@
 pragma solidity ^0.8.0;
 
 import {ValidateParams} from '../types/ValidateParams.sol';
-import {ZapParams} from '../types/ZapParams.sol';
 
 /// @notice Interface for the KS Zap Router V3
 interface IKSZapRouterV3 {

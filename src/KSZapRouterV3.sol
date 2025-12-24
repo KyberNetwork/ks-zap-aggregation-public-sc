@@ -12,8 +12,11 @@ import {Lock} from 'ks-common-sc/src/base/Lock.sol';
 import {ManagementBase} from 'ks-common-sc/src/base/ManagementBase.sol';
 import {ManagementPausable} from 'ks-common-sc/src/base/ManagementPausable.sol';
 import {ManagementRescuable} from 'ks-common-sc/src/base/ManagementRescuable.sol';
+
 import {KSRoles} from 'ks-common-sc/src/libraries/KSRoles.sol';
-import {PermitHelper} from 'ks-common-sc/src/libraries/token/PermitHelper.sol';
+import {CalldataDecoder} from 'ks-common-sc/src/libraries/calldata/CalldataDecoder.sol';
+
+import {ECDSA} from 'openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol';
 
 contract KSZapRouterV3 is
   IKSZapRouterV3,
@@ -22,18 +25,20 @@ contract KSZapRouterV3 is
   ManagementPausable,
   ManagementRescuable
 {
-  /// @notice Role for the whitelisted approval proxies.
-  bytes32 internal constant ALLOWANCE_HUB_ROLE = keccak256('ALLOWANCE_HUB_ROLE');
+  using CalldataDecoder for bytes;
+
+  /// @notice Role for the call data signers.
+  bytes32 internal constant SIGNER_ROLE = keccak256('SIGNER_ROLE');
 
   constructor(
     address initialAdmin,
     address[] memory initialGuardians,
     address[] memory initialRescuers,
-    address[] memory initialAllowanceHubs
+    address[] memory initialSigners
   ) ManagementBase(0, initialAdmin) {
     _batchGrantRole(KSRoles.GUARDIAN_ROLE, initialGuardians);
     _batchGrantRole(KSRoles.RESCUER_ROLE, initialRescuers);
-    _batchGrantRole(ALLOWANCE_HUB_ROLE, initialAllowanceHubs);
+    _batchGrantRole(SIGNER_ROLE, initialSigners);
   }
 
   /**
@@ -44,13 +49,14 @@ contract KSZapRouterV3 is
     external
     payable
     whenNotPaused
-    onlyRole(ALLOWANCE_HUB_ROLE)
     returns (bytes memory result)
   {
     ZapParams calldata zapParams;
     assembly ('memory-safe') {
       zapParams := add(data.offset, calldataload(data.offset))
     }
+    bytes calldata signature = data.decodeBytes(1);
+    _verifySignature(zapParams, signature);
 
     bytes[] memory beforeExecutionData = _beforeExecution(zapParams.validateParams);
 
@@ -68,6 +74,11 @@ contract KSZapRouterV3 is
   /// @inheritdoc IKSZapRouterV3
   function msgSender() external view returns (address) {
     return _getLocker();
+  }
+
+  function _verifySignature(ZapParams calldata zapParams, bytes calldata signature) internal view {
+    bytes32 hash = keccak256(abi.encode(block.chainid, address(this), msg.sender, zapParams));
+    _checkRole(SIGNER_ROLE, ECDSA.recover(hash, signature));
   }
 
   /// @dev Returns the state before execution
