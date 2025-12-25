@@ -55,6 +55,11 @@ contract KSZapRouterV3 is
     assembly ('memory-safe') {
       zapParams := add(data.offset, calldataload(data.offset))
     }
+
+    if (zapParams.deadline < block.timestamp) {
+      revert DeadlinePassed(zapParams.deadline, block.timestamp);
+    }
+
     bytes calldata signature = data.decodeBytes(1);
     _verifySignature(zapParams, signature);
 
