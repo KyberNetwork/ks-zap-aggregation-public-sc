@@ -16,6 +16,12 @@ interface IKSZapRouterV3 {
   /// @notice Emitted when the client data is set
   event ClientData(bytes clientData);
 
+  /**
+   * @notice Called by the allowance hub to execute zap action.
+   * @param data The encoded data of `ZapParams` struct.
+   */
+  function ksExecute(bytes calldata data) external payable returns (bytes memory result);
+
   /// @notice Returns the address that called the zap function
   function msgSender() external view returns (address);
 }
