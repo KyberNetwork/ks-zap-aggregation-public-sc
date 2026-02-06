@@ -3,7 +3,6 @@ pragma solidity 0.8.30;
 
 import {IKSZapExecutor} from './interfaces/IKSZapExecutor.sol';
 import {IKSZapRouterV3} from './interfaces/IKSZapRouterV3.sol';
-import {IKSGenericRouter} from 'ks-allowance-hub/src/interfaces/IKSGenericRouter.sol';
 
 import {ValidateParams} from './types/ValidateParams.sol';
 import {ZapParams} from './types/ZapParams.sol';
@@ -16,45 +15,64 @@ import {ManagementRescuable} from 'ks-common-sc/src/base/ManagementRescuable.sol
 import {KSRoles} from 'ks-common-sc/src/libraries/KSRoles.sol';
 import {CalldataDecoder} from 'ks-common-sc/src/libraries/calldata/CalldataDecoder.sol';
 
+import {ERC721Holder} from 'openzeppelin-contracts/contracts/token/ERC721/utils/ERC721Holder.sol';
+import {Address} from 'openzeppelin-contracts/contracts/utils/Address.sol';
+import {TransientSlot} from 'openzeppelin-contracts/contracts/utils/TransientSlot.sol';
 import {ECDSA} from 'openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol';
 
 contract KSZapRouterV3 is
   IKSZapRouterV3,
-  IKSGenericRouter,
   Lock,
   ManagementPausable,
-  ManagementRescuable
+  ManagementRescuable,
+  ERC721Holder
 {
   using CalldataDecoder for bytes;
+  using Address for address;
+  using TransientSlot for *;
 
   /// @notice Role for the call data signers.
   bytes32 internal constant SIGNER_ROLE = keccak256('SIGNER_ROLE');
+
+  /// @notice The slot holding the executor address, transiently.
+  bytes32 internal constant EXECUTOR_SLOT = bytes32(uint256(keccak256('Executor')) - 1);
 
   constructor(
     address initialAdmin,
     address[] memory initialGuardians,
     address[] memory initialRescuers,
     address[] memory initialSigners
-  ) ManagementBase(0, initialAdmin) {
-    _batchGrantRole(KSRoles.GUARDIAN_ROLE, initialGuardians);
-    _batchGrantRole(KSRoles.RESCUER_ROLE, initialRescuers);
+  )
+    ManagementBase(0, initialAdmin)
+    ManagementPausable(initialGuardians)
+    ManagementRescuable(initialRescuers)
+  {
     _batchGrantRole(SIGNER_ROLE, initialSigners);
   }
 
-  /**
-   * @notice Called by the allowance hub to swap and then bridge the tokens.
-   * @param data The encoded data of `ZapParams` struct.
-   */
+  /// @dev Allows the contract to receive native tokens
+  receive() external payable {}
+
+  /// @dev Forwards the call to the current executor
+  fallback(bytes calldata data) external payable returns (bytes memory) {
+    return EXECUTOR_SLOT.asAddress().tload().functionDelegateCall(data);
+  }
+
+  /// @inheritdoc IKSZapRouterV3
   function ksExecute(bytes calldata data)
     external
     payable
     whenNotPaused
+    isNotLocked
     returns (bytes memory result)
   {
     ZapParams calldata zapParams;
     assembly ('memory-safe') {
       zapParams := add(data.offset, calldataload(data.offset))
     }
+
+    // Set the executor address in transient storage
+    EXECUTOR_SLOT.asAddress().tstore(zapParams.executor);
 
     if (zapParams.deadline < block.timestamp) {
       revert DeadlinePassed(zapParams.deadline, block.timestamp);
@@ -65,7 +83,8 @@ contract KSZapRouterV3 is
 
     bytes[] memory beforeExecutionData = _beforeExecution(zapParams.validateParams);
 
-    result = IKSZapExecutor(zapParams.executor).executeZap{value: msg.value}(zapParams.executorData);
+    result = zapParams.executor
+      .functionDelegateCall(abi.encodeCall(IKSZapExecutor.executeZap, (zapParams.executorData)));
 
     _afterExecution(zapParams.validateParams, beforeExecutionData);
 
@@ -74,6 +93,9 @@ contract KSZapRouterV3 is
     if (zapParams.clientData.length > 0) {
       emit ClientData(zapParams.clientData);
     }
+
+    // Clear the executor address from transient storage
+    EXECUTOR_SLOT.asAddress().tstore(address(0));
   }
 
   /// @inheritdoc IKSZapRouterV3
