@@ -1,0 +1,93 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import {ILendingActionAdapter} from '../../interfaces/modules/lending/ILendingActionAdapter.sol';
+import {
+  ILeverageFluidZapValidator
+} from '../../interfaces/validators/part-1/ILeverageFluidZapValidator.sol';
+import {BalanceDelta} from '../../vendors/uniswap-v4/BalanceDelta.sol';
+
+import {IFluidVaultResolver} from '../../vendors/fluid/IFluidVaultResolver.sol';
+
+import {CalldataDecoder} from 'ks-common-sc/src/libraries/calldata/CalldataDecoder.sol';
+
+import {IERC721Enumerable} from 'openzeppelin-contracts/contracts/interfaces/IERC721Enumerable.sol';
+
+contract LeverageFluidZapValidator is ILeverageFluidZapValidator {
+  using CalldataDecoder for bytes;
+
+  function _beforeExecutionZapLeverageFluid(bytes calldata _beforeExecutionInput)
+    internal
+    view
+    returns (bytes memory)
+  {
+    ZapLeverageFluidBeforeExecutionInput calldata beforeExecutionInput;
+    assembly ('memory-safe') {
+      beforeExecutionInput := _beforeExecutionInput.offset
+    }
+
+    address factory = IFluidVaultResolver(beforeExecutionInput.resolver).FACTORY();
+
+    if (beforeExecutionInput.nftId == 0) {
+      return abi.encode(0, 0, IERC721Enumerable(factory).totalSupply() + 1);
+    }
+
+    IFluidVaultResolver.UserPosition memory userPosition = IFluidVaultResolver(
+        beforeExecutionInput.resolver
+      ).positionByNftId(beforeExecutionInput.nftId);
+
+    return abi.encode(userPosition.supply, userPosition.borrow, beforeExecutionInput.nftId);
+  }
+
+  function _afterExecutionZapLeverageFluid(
+    bytes calldata _beforeExecutionInput,
+    bytes calldata _beforeExecutionOutput,
+    bytes calldata _afterExecutionInput
+  ) internal view {
+    ZapLeverageFluidBeforeExecutionInput calldata beforeExecutionInput;
+    assembly ('memory-safe') {
+      beforeExecutionInput := _beforeExecutionInput.offset
+    }
+
+    ZapLeverageFluidAfterExecutionInput calldata afterExecutionInput;
+    assembly ('memory-safe') {
+      afterExecutionInput := _afterExecutionInput.offset
+    }
+
+    uint256 initialCollateralAmount = _beforeExecutionOutput.decodeUint256();
+    uint256 initialDebtAmount = _beforeExecutionOutput.decodeUint256(1);
+    uint256 nftId = _beforeExecutionOutput.decodeUint256(2);
+
+    address factory = IFluidVaultResolver(beforeExecutionInput.resolver).FACTORY();
+
+    require(
+      IERC721Enumerable(factory).ownerOf(nftId) == beforeExecutionInput.recipient,
+      ZapLeverageFluidInvalidPositionOwner()
+    );
+
+    IFluidVaultResolver.UserPosition memory userPosition =
+      IFluidVaultResolver(beforeExecutionInput.resolver).positionByNftId(nftId);
+
+    if (!_checkDeltaInRangeFluid(
+        initialCollateralAmount, userPosition.supply, afterExecutionInput.collateralDeltaRange
+      )) {
+      revert ZapLeverageFluidInvalidCollateralDelta();
+    }
+
+    if (!_checkDeltaInRangeFluid(
+        initialDebtAmount, userPosition.borrow, afterExecutionInput.debtDeltaRange
+      )) {
+      revert ZapLeverageFluidInvalidDebtDelta();
+    }
+  }
+
+  function _checkDeltaInRangeFluid(uint256 initial, uint256 current, BalanceDelta deltaRange)
+    internal
+    pure
+    returns (bool)
+  {
+    int256 delta = int256(current) - int256(initial);
+
+    return int128(deltaRange.amount0()) <= delta && delta <= int128(deltaRange.amount1());
+  }
+}

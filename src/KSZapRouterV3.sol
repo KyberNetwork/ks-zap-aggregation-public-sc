@@ -12,7 +12,6 @@ import {ManagementBase} from 'ks-common-sc/src/base/ManagementBase.sol';
 import {ManagementPausable} from 'ks-common-sc/src/base/ManagementPausable.sol';
 import {ManagementRescuable} from 'ks-common-sc/src/base/ManagementRescuable.sol';
 
-import {KSRoles} from 'ks-common-sc/src/libraries/KSRoles.sol';
 import {CalldataDecoder} from 'ks-common-sc/src/libraries/calldata/CalldataDecoder.sol';
 
 import {ERC721Holder} from 'openzeppelin-contracts/contracts/token/ERC721/utils/ERC721Holder.sol';
