@@ -1,23 +1,26 @@
 {
-    "1": {
-        "KSZapValidatorV3Part1": "0x8ed3272F6D6322e64BF4F14e0aCE7348EB6243f4"
-    },
-    "8453": {
-        "KSZapValidatorV3Part1": "0x8ed3272F6D6322e64BF4F14e0aCE7348EB6243f4"
-    },
-    "56": {
-        "KSZapValidatorV3Part1": "0x8ed3272F6D6322e64BF4F14e0aCE7348EB6243f4"
-    },
-    "137": {
-        "KSZapValidatorV3Part1": "0x8ed3272F6D6322e64BF4F14e0aCE7348EB6243f4"
-    },
-    "42161": {
-        "KSZapValidatorV3Part1": "0x8ed3272F6D6322e64BF4F14e0aCE7348EB6243f4"
-    },
-    "59144": {
-        "KSZapValidatorV3Part1": "0x8ed3272F6D6322e64BF4F14e0aCE7348EB6243f4"
-    },
-    "43114": {
-        "KSZapValidatorV3Part1": "0x8ed3272F6D6322e64BF4F14e0aCE7348EB6243f4"
-    }
+  "1": {
+    "KSZapValidatorV3Part1": "0x8ed3272F6D6322e64BF4F14e0aCE7348EB6243f4"
+  },
+  "8453": {
+    "KSZapValidatorV3Part1": "0x8ed3272F6D6322e64BF4F14e0aCE7348EB6243f4"
+  },
+  "56": {
+    "KSZapValidatorV3Part1": "0x8ed3272F6D6322e64BF4F14e0aCE7348EB6243f4"
+  },
+  "137": {
+    "KSZapValidatorV3Part1": "0x8ed3272F6D6322e64BF4F14e0aCE7348EB6243f4"
+  },
+  "42161": {
+    "KSZapValidatorV3Part1": "0x8ed3272F6D6322e64BF4F14e0aCE7348EB6243f4"
+  },
+  "59144": {
+    "KSZapValidatorV3Part1": "0x8ed3272F6D6322e64BF4F14e0aCE7348EB6243f4"
+  },
+  "43114": {
+    "KSZapValidatorV3Part1": "0x8ed3272F6D6322e64BF4F14e0aCE7348EB6243f4"
+  },
+  "80094": {
+    "KSZapValidatorV3Part1": "0x8ed3272F6D6322e64BF4F14e0aCE7348EB6243f4"
+  }
 }
