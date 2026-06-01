@@ -5,12 +5,15 @@ import {ILendingActionAdapter} from '../../interfaces/modules/lending/ILendingAc
 import {
   ILeverageGenericZapValidator
 } from '../../interfaces/validators/part-1/ILeverageGenericZapValidator.sol';
+
 import {BalanceDelta} from '../../vendors/uniswap-v4/BalanceDelta.sol';
+import {SafeCast} from '../../vendors/uniswap-v4/SafeCast.sol';
 
 import {CalldataDecoder} from 'ks-common-sc/src/libraries/calldata/CalldataDecoder.sol';
 
 contract LeverageGenericZapValidator is ILeverageGenericZapValidator {
   using CalldataDecoder for bytes;
+  using SafeCast for uint256;
 
   function _beforeExecutionZapLeverageGeneric(bytes calldata _beforeExecutionInput)
     internal
@@ -86,8 +89,7 @@ contract LeverageGenericZapValidator is ILeverageGenericZapValidator {
     pure
     returns (bool)
   {
-    int256 delta = int256(current) - int256(initial);
-
-    return int128(deltaRange.amount0()) <= delta && delta <= int128(deltaRange.amount1());
+    int256 delta = current.toInt256() - initial.toInt256();
+    return deltaRange.amount0() <= delta && delta <= deltaRange.amount1();
   }
 }
