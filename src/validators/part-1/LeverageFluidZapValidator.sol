@@ -32,9 +32,8 @@ contract LeverageFluidZapValidator is ILeverageFluidZapValidator {
       return abi.encode(0, 0, IERC721Enumerable(factory).totalSupply() + 1);
     }
 
-    IFluidVaultResolver.UserPosition memory userPosition = IFluidVaultResolver(
-        beforeExecutionInput.resolver
-      ).positionByNftId(beforeExecutionInput.nftId);
+    (IFluidVaultResolver.UserPosition memory userPosition,) =
+      IFluidVaultResolver(beforeExecutionInput.resolver).positionByNftId(beforeExecutionInput.nftId);
 
     return abi.encode(userPosition.supply, userPosition.borrow, beforeExecutionInput.nftId);
   }
@@ -58,15 +57,15 @@ contract LeverageFluidZapValidator is ILeverageFluidZapValidator {
     uint256 initialDebtAmount = _beforeExecutionOutput.decodeUint256(1);
     uint256 nftId = _beforeExecutionOutput.decodeUint256(2);
 
-    address factory = IFluidVaultResolver(beforeExecutionInput.resolver).FACTORY();
+    (
+      IFluidVaultResolver.UserPosition memory userPosition,
+      IFluidVaultResolver.VaultEntireData memory vaultEntireData
+    ) = IFluidVaultResolver(beforeExecutionInput.resolver).positionByNftId(nftId);
 
     require(
-      IERC721Enumerable(factory).ownerOf(nftId) == beforeExecutionInput.recipient,
-      ZapLeverageFluidInvalidPositionOwner()
+      userPosition.owner == beforeExecutionInput.recipient, ZapLeverageFluidInvalidPositionOwner()
     );
-
-    IFluidVaultResolver.UserPosition memory userPosition =
-      IFluidVaultResolver(beforeExecutionInput.resolver).positionByNftId(nftId);
+    require(vaultEntireData.vault == beforeExecutionInput.vault, ZapLeverageFluidInvalidVault());
 
     if (!_checkDeltaInRangeFluid(
         initialCollateralAmount, userPosition.supply, afterExecutionInput.collateralDeltaRange

@@ -5,10 +5,12 @@ import {BalanceDelta} from '../../../vendors/uniswap-v4/BalanceDelta.sol';
 
 interface ILeverageFluidZapValidator {
   error ZapLeverageFluidInvalidPositionOwner();
+  error ZapLeverageFluidInvalidVault();
   error ZapLeverageFluidInvalidCollateralDelta();
   error ZapLeverageFluidInvalidDebtDelta();
 
   struct ZapLeverageFluidBeforeExecutionInput {
+    address vault;
     address resolver;
     uint256 nftId;
     address collateralToken;
