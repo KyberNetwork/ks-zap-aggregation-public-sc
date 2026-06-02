@@ -19,9 +19,17 @@ interface IFluidVaultResolver {
     uint256 dustBorrow;
   }
 
+  struct VaultEntireData {
+    address vault;
+    // skip the rest of vault entire data
+  }
+
   function FACTORY() external view returns (address);
 
-  function positionByNftId(uint256 nftId_) external view returns (UserPosition memory userPosition_);
+  function positionByNftId(uint256 nftId_)
+    external
+    view
+    returns (UserPosition memory userPosition_, VaultEntireData memory vaultEntireData_);
 
   function positionsNftIdOfUser(address user_) external view returns (uint256[] memory nftIds_);
 
