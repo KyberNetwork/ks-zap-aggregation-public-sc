@@ -10,8 +10,11 @@ import {IUniswapV3NFT} from '../../vendors/uniswap-v3/IUniswapV3NFT.sol';
 
 import {CalldataDecoder} from 'ks-common-sc/src/libraries/calldata/CalldataDecoder.sol';
 
+import {Address} from 'openzeppelin-contracts/contracts/utils/Address.sol';
+
 contract UniswapV3ForkZapValidator is IUniswapV3ForkZapValidator {
   using CalldataDecoder for bytes;
+  using Address for address;
 
   function _beforeExecutionUniswapV3Fork(bytes calldata _beforeExecutionInput)
     internal
@@ -26,8 +29,8 @@ contract UniswapV3ForkZapValidator is IUniswapV3ForkZapValidator {
     if (beforeExecutionInput.tokenId == 0) {
       return abi.encode(IUniswapV3NFT(beforeExecutionInput.posManager).totalSupply());
     } else {
-      (, bytes memory positionData) = beforeExecutionInput.posManager
-        .staticcall(abi.encodeCall(IUniswapV3NFT.positions, (beforeExecutionInput.tokenId)));
+      bytes memory positionData =
+        _positions(beforeExecutionInput.posManager, beforeExecutionInput.tokenId);
 
       uint256 initialLiquidity =
         BytesHelper.mloadUint256(positionData, beforeExecutionInput.liquidityOffset * 32);
@@ -64,8 +67,7 @@ contract UniswapV3ForkZapValidator is IUniswapV3ForkZapValidator {
       initialLiquidity = _beforeExecutionOutput.decodeUint256();
     }
 
-    (, bytes memory positionData) =
-      beforeExecutionInput.posManager.staticcall(abi.encodeCall(IUniswapV3NFT.positions, (tokenId)));
+    bytes memory positionData = _positions(beforeExecutionInput.posManager, tokenId);
 
     for (uint256 offset = 0; offset * 32 < positionData.length; offset++) {
       if (afterExecutionInput.needCheckFields.at(offset)) {
@@ -108,8 +110,8 @@ contract UniswapV3ForkZapValidator is IUniswapV3ForkZapValidator {
 
     uint256 initialLiquidity = _beforeExecutionOutput.decodeUint256();
 
-    (, bytes memory positionData) = beforeExecutionInput.posManager
-      .staticcall(abi.encodeCall(IUniswapV3NFT.positions, (beforeExecutionInput.tokenId)));
+    bytes memory positionData =
+      _positions(beforeExecutionInput.posManager, beforeExecutionInput.tokenId);
 
     uint256 currentLiquidity =
       BytesHelper.mloadUint256(positionData, beforeExecutionInput.liquidityOffset * 32);
@@ -123,5 +125,9 @@ contract UniswapV3ForkZapValidator is IUniswapV3ForkZapValidator {
         == afterExecutionInput.recipient,
       UniswapV3ForkInvalidPositionOwner()
     );
+  }
+
+  function _positions(address posManager, uint256 tokenId) internal view returns (bytes memory) {
+    return posManager.functionStaticCall(abi.encodeCall(IUniswapV3NFT.positions, (tokenId)));
   }
 }
