@@ -25,6 +25,7 @@ contract PancakeInfinityZapValidator is IPancakeInfinityZapValidator {
     }
 
     if (beforeExecutionInput.tokenId == 0) {
+      // Validate the first newly minted position
       return abi.encode(ICLPositionManager(beforeExecutionInput.posManager).nextTokenId());
     } else {
       return abi.encode(

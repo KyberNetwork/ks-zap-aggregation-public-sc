@@ -24,6 +24,8 @@ contract UniswapV3ForkZapValidator is IUniswapV3ForkZapValidator {
     }
 
     if (beforeExecutionInput.tokenId == 0) {
+      // The index of a position in ERC721Enumerable can't be decreased.
+      // So the position at `totalSupply()` must be a newly minted one.
       return abi.encode(IUniswapV3NFT(beforeExecutionInput.posManager).totalSupply());
     } else {
       (, bytes memory positionData) = beforeExecutionInput.posManager
