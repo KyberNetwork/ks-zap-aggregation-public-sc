@@ -31,6 +31,7 @@ contract LeverageFluidZapValidator is ILeverageFluidZapValidator {
     address factory = IFluidVaultResolver(beforeExecutionInput.resolver).FACTORY();
 
     if (beforeExecutionInput.nftId == 0) {
+      // validate the first newly minted position
       return abi.encode(0, 0, IERC721Enumerable(factory).totalSupply() + 1);
     }
 
