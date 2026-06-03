@@ -36,15 +36,5 @@ abstract contract KSZapValidatorV3Base is IKSZapValidatorV3 {
     virtual
     returns (function(bytes calldata, bytes calldata, bytes calldata) internal);
 
-  function _beforeExecutionDummy(bytes calldata _beforeExecutionInput)
-    internal
-    view
-    returns (bytes memory)
-  {}
-
-  function _afterExecutionDummy(
-    bytes calldata _beforeExecutionInput,
-    bytes calldata _beforeExecutionOutput,
-    bytes calldata _afterExecutionInput
-  ) internal view {}
+  function _beforeExecutionDummy(bytes calldata) internal view returns (bytes memory) {}
 }
