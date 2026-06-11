@@ -22,6 +22,7 @@ contract UniswapV4ZapValidator is IUniswapV4ZapValidator {
     }
 
     if (beforeExecutionInput.tokenId == 0) {
+      // Validate the first newly minted position
       return abi.encode(IPositionManager(beforeExecutionInput.posManager).nextTokenId());
     } else {
       return abi.encode(
