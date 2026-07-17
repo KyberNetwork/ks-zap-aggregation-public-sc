@@ -5,7 +5,7 @@ import 'script/Base.s.sol';
 import 'src/KSZapRouterV3.sol';
 
 contract DeployKSZapRouterV3Script is BaseZapAggScript {
-  string salt = '260206';
+  string salt = '260717';
 
   /**
    * @dev Deploys KSZapRouterV3 contract to specified chains
