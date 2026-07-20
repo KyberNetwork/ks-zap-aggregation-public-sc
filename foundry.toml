@@ -35,5 +35,6 @@ plasma_mainnet = "${RPC_9745}"
 hyperevm_mainnet = "${RPC_999}"
 sonic_mainnet = "${RPC_146}"
 monad_mainnet = "${RPC_143}"
+robinhood_mainnet = "${RPC_4663}"
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
