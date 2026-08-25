@@ -8,6 +8,8 @@ contract ImmutableState {
 
   IWETH internal immutable WETH;
 
+  bool internal immutable IS_ARC_CHAIN_LIKE;
+
   constructor(address _WETH) {
     original = address(this);
     WETH = IWETH(_WETH);
