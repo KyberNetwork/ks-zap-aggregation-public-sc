@@ -47,7 +47,7 @@ library CommonLibrary {
   function wrapETH(IWETH WETH) internal {
     uint256 balance = address(this).balance;
     if (balance > 0) {
-      WETH.deposit{value: balance}();
+      try WETH.deposit{value: balance}() {} catch {}
     }
   }
 
@@ -55,7 +55,7 @@ library CommonLibrary {
     unchecked {
       uint256 balance = address(WETH).selfBalance();
       if (balance > 1) {
-        WETH.withdraw(balance - 1);
+        try WETH.withdraw(balance - 1) {} catch {}
       }
     }
   }
