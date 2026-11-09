@@ -16,7 +16,8 @@ interface IZapSolidlyV2Settler is IZapSettler, IZapSolidlyV2HelperTypes {
    * @notice Parameters of the zap in
    * @param pool The pair to add liquidity to
    * @param readBalanceFlag Whether to read the token balances, for example when using fee-on-transfer (FOT) tokens
-   * @param helper The helper queried for the mint and the swap of the zap again
+   * @param helper The helper delegatecalled for the pool swap of the zap again and queried for the
+   * mint
    * @param minZapInAmounts The remaining amounts of token0 and token1 from which the zap again runs;
    * it runs when either remaining amount is at least its minimum
    * @param minLiquidity The minimum liquidity to add

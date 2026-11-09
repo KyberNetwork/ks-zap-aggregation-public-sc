@@ -13,12 +13,10 @@ interface IZapArrakisV2Settler is IZapSettler, IZapArrakisV2HelperTypes {
   /// @notice Thrown when the shares minted are below the minimum
   error ZapArrakisV2InsufficientShares();
 
-  /// @notice Thrown when the swap callback is not called by the pool of the ongoing swap
-  error InvalidSwapCallbackCaller(address caller);
-
   /**
    * @notice Parameters of the swap and the second deposit with the remaining tokens
-   * @param helper The helper queried for the swap; the zero address disables the zap again
+   * @param helper The helper delegatecalled for the pool swap of the zap again; the zero address
+   * disables the zap again
    * @param minZapInAmounts The remaining amounts of token0 and token1 from which the zap again runs;
    * it runs when either remaining amount is at least its minimum
    * @param sqrtPriceLimit0X96 The lower sqrt price limit of the swap preview
@@ -81,31 +79,4 @@ interface IZapArrakisV2Settler is IZapSettler, IZapArrakisV2HelperTypes {
     uint256 remainingAmount0;
     uint256 remainingAmount1;
   }
-
-  /**
-   * @notice Pays the pool the token owed for the swap of the zap again; Uniswap V3 pools and forks
-   * @param amount0Delta The token0 amount owed to the pool when positive
-   * @param amount1Delta The token1 amount owed to the pool when positive
-   * @param data ABI-encoded token0 and token1 of the pool
-   */
-  function uniswapV3SwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata data)
-    external;
-
-  /**
-   * @notice Pays the pool the token owed for the swap of the zap again; Algebra pools
-   * @param amount0Delta The token0 amount owed to the pool when positive
-   * @param amount1Delta The token1 amount owed to the pool when positive
-   * @param data ABI-encoded token0 and token1 of the pool
-   */
-  function algebraSwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata data)
-    external;
-
-  /**
-   * @notice Pays the pool the token owed for the swap of the zap again; Ramses V2 pools
-   * @param amount0Delta The token0 amount owed to the pool when positive
-   * @param amount1Delta The token1 amount owed to the pool when positive
-   * @param data ABI-encoded token0 and token1 of the pool
-   */
-  function ramsesV2SwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata data)
-    external;
 }

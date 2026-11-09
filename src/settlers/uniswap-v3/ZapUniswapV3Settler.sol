@@ -2,37 +2,34 @@
 pragma solidity 0.8.30;
 
 import {IKSGenericRouter} from '../../interfaces/IKSGenericRouter.sol';
-import {IZapPreviewHelper} from '../../interfaces/settlers/IZapPreviewHelper.sol';
 import {IZapUniswapV3Settler} from '../../interfaces/settlers/uniswap-v3/IZapUniswapV3Settler.sol';
 
 import {ImmutableState} from '../../base/ImmutableState.sol';
+import {ZapAgainHelperCaller} from '../../base/ZapAgainHelperCaller.sol';
 import {CommonLibrary} from '../../libraries/CommonLibrary.sol';
 import {IUniswapV3NFT} from '../../vendors/uniswap-v3/IUniswapV3NFT.sol';
 import {IUniswapV3Pool} from '../../vendors/uniswap-v3/IUniswapV3Pool.sol';
 
-import {CalldataDecoder} from 'ks-common-sc/src/libraries/calldata/CalldataDecoder.sol';
 import {TokenHelper} from 'ks-common-sc/src/libraries/token/TokenHelper.sol';
 
 import {IERC721} from 'openzeppelin-contracts/contracts/token/ERC721/IERC721.sol';
 import {
   ReentrancyGuardTransient
 } from 'openzeppelin-contracts/contracts/utils/ReentrancyGuardTransient.sol';
-import {TransientSlot} from 'openzeppelin-contracts/contracts/utils/TransientSlot.sol';
 
 /// @title ZapUniswapV3Settler
 /// @notice Adds liquidity to a Uniswap V3 position with the token balances this contract holds, in
 /// an owner call of an allowance hub fulfillment
 /// @dev The contract holds no tokens between transactions. 1 wei of each token is retained. The
-/// swap callback is accepted only from the pool of the ongoing zap again swap.
-contract ZapUniswapV3Settler is IZapUniswapV3Settler, ImmutableState, ReentrancyGuardTransient {
-  using CalldataDecoder for bytes;
+/// swap callbacks of the zap again are forwarded to the helper.
+contract ZapUniswapV3Settler is
+  IZapUniswapV3Settler,
+  ImmutableState,
+  ZapAgainHelperCaller,
+  ReentrancyGuardTransient
+{
   using TokenHelper for address;
   using CommonLibrary for *;
-  using TransientSlot for *;
-
-  /// @dev Transient slot holding the pool of the ongoing zap again swap
-  bytes32 private constant SWAP_POOL_SLOT =
-    bytes32(uint256(keccak256('ks.zap.settler.uniswap-v3.swap-pool')) - 1);
 
   /// @dev Tokens and amounts of a zap in
   struct ZapInState {
@@ -47,6 +44,11 @@ contract ZapUniswapV3Settler is IZapUniswapV3Settler, ImmutableState, Reentrancy
 
   /// @dev Allows the contract to receive native tokens
   receive() external payable {}
+
+  /// @dev Forwards the swap callbacks of the pool swap of the zap again to the helper
+  fallback() external {
+    _forwardSwapCallback();
+  }
 
   /// @inheritdoc IKSGenericRouter
   function ksExecute(bytes calldata data) external payable nonReentrant returns (bytes memory) {
@@ -118,29 +120,6 @@ contract ZapUniswapV3Settler is IZapUniswapV3Settler, ImmutableState, Reentrancy
     return result;
   }
 
-  /// @inheritdoc IZapUniswapV3Settler
-  function uniswapV3SwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata data)
-    external
-  {
-    _paySwapCallback(amount0Delta, amount1Delta, data);
-  }
-
-  /// @dev Pays the pool of the ongoing zap again swap the token owed for the swap
-  function _paySwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata data)
-    internal
-  {
-    require(msg.sender == SWAP_POOL_SLOT.asAddress().tload(), InvalidSwapCallbackCaller(msg.sender));
-
-    address token0 = data.decodeAddress(0);
-    address token1 = data.decodeAddress(1);
-
-    if (amount0Delta > 0) {
-      token0.safeTransfer(msg.sender, uint256(amount0Delta));
-    } else {
-      token1.safeTransfer(msg.sender, uint256(amount1Delta));
-    }
-  }
-
   /// @dev Adds the amounts in `state` to the position and records the addition in `zapInResult`
   function _addLiquidity(
     ZapInParams calldata params,
@@ -167,52 +146,37 @@ contract ZapUniswapV3Settler is IZapUniswapV3Settler, ImmutableState, Reentrancy
     }
   }
 
-  /// @dev Swaps the remaining amounts as the helper previews and adds them to the position
+  /// @dev Swaps the remaining amounts through the helper and adds them to the position
   function _zapAgain(
     ZapInParams calldata params,
     ZapInState memory state,
     ZapInResult memory zapInResult
   ) internal {
-    PreviewZapInResult memory preview = abi.decode(
-      IZapPreviewHelper(params.zapAgain.helper)
-        .previewZapIn(
-          abi.encode(
-            ZapInFixedParams({
-              posManager: params.posManager,
-              pool: params.pool,
-              tickLower: params.tickLower,
-              tickUpper: params.tickUpper,
-              sqrtPriceLimit0X96: params.zapAgain.sqrtPriceLimit0X96,
-              sqrtPriceLimit1X96: params.zapAgain.sqrtPriceLimit1X96,
-              iterations: params.zapAgain.iterations,
-              optimizer: address(0),
-              optimizeFixedParams: ''
-            })
-          ),
-          abi.encode(PreviewZapInVariableParams({amount0: state.amount0, amount1: state.amount1}))
+    PoolSwapResult memory swapResult = abi.decode(
+      _poolSwap(
+        params.zapAgain.helper,
+        abi.encode(
+          ZapInFixedParams({
+            posManager: params.posManager,
+            pool: params.pool,
+            tickLower: params.tickLower,
+            tickUpper: params.tickUpper,
+            sqrtPriceLimit0X96: params.zapAgain.sqrtPriceLimit0X96,
+            sqrtPriceLimit1X96: params.zapAgain.sqrtPriceLimit1X96,
+            iterations: params.zapAgain.iterations,
+            optimizer: address(0),
+            optimizeFixedParams: ''
+          })
         ),
-      (PreviewZapInResult)
+        abi.encode(PoolSwapVariableParams({extraData: ''}))
+      ),
+      (PoolSwapResult)
     );
 
-    if (preview.sqrtPriceX96 != preview.sqrtPriceStartX96) {
-      bool zeroForOne = preview.sqrtPriceX96 < preview.sqrtPriceStartX96;
+    state.amount0 = swapResult.amount0;
+    state.amount1 = swapResult.amount1;
 
-      SWAP_POOL_SLOT.asAddress().tstore(params.pool);
-      (int256 amount0Delta, int256 amount1Delta) = IUniswapV3Pool(params.pool)
-        .swap(
-          address(this),
-          zeroForOne,
-          int256(zeroForOne ? state.amount0 : state.amount1),
-          preview.sqrtPriceX96,
-          abi.encode(state.token0, state.token1)
-        );
-      SWAP_POOL_SLOT.asAddress().tstore(address(0));
-
-      state.amount0 = state.amount0.subDelta(amount0Delta);
-      state.amount1 = state.amount1.subDelta(amount1Delta);
-    }
-
-    if (preview.positionLiquidity != 0) {
+    if (swapResult.positionLiquidity != 0) {
       _addLiquidity(params, state, zapInResult);
     }
   }

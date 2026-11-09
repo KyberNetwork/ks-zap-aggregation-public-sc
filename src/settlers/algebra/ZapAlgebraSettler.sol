@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
-import {IZapAlgebraSettler} from '../../interfaces/settlers/algebra/IZapAlgebraSettler.sol';
 import {ZapUniswapV3Settler} from '../uniswap-v3/ZapUniswapV3Settler.sol';
 
 import {IAlgebraV1_9NFT} from '../../vendors/algebra-v1.9/IAlgebraV1_9NFT.sol';
@@ -9,15 +8,8 @@ import {IAlgebraV1_9NFT} from '../../vendors/algebra-v1.9/IAlgebraV1_9NFT.sol';
 /// @title ZapAlgebraSettler
 /// @notice Adds liquidity to an Algebra V1.9 or Algebra Integral V1.0 position with the token
 /// balances this contract holds, in an owner call of an allowance hub fulfillment
-contract ZapAlgebraSettler is IZapAlgebraSettler, ZapUniswapV3Settler {
+contract ZapAlgebraSettler is ZapUniswapV3Settler {
   constructor(address _WETH) ZapUniswapV3Settler(_WETH) {}
-
-  /// @inheritdoc IZapAlgebraSettler
-  function algebraSwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata data)
-    external
-  {
-    _paySwapCallback(amount0Delta, amount1Delta, data);
-  }
 
   /// @dev Mints a new position to the recipient with the given amounts
   function _mint(

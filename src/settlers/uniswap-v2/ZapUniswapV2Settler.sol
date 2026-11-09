@@ -5,10 +5,10 @@ import {IKSGenericRouter} from '../../interfaces/IKSGenericRouter.sol';
 import {
   IZapAddLiquidityPreviewHelper
 } from '../../interfaces/settlers/IZapAddLiquidityPreviewHelper.sol';
-import {IZapPreviewHelper} from '../../interfaces/settlers/IZapPreviewHelper.sol';
 import {IZapUniswapV2Settler} from '../../interfaces/settlers/uniswap-v2/IZapUniswapV2Settler.sol';
 
 import {ImmutableState} from '../../base/ImmutableState.sol';
+import {ZapAgainHelperCaller} from '../../base/ZapAgainHelperCaller.sol';
 import {CommonLibrary} from '../../libraries/CommonLibrary.sol';
 import {IUniswapV2Pair} from '../../vendors/uniswap-v2/IUniswapV2Pair.sol';
 import {UniswapV2Library} from '../../vendors/uniswap-v2/UniswapV2Library.sol';
@@ -23,7 +23,12 @@ import {
 /// @notice Adds liquidity to a Uniswap V2 pair with the token balances this contract holds, in an
 /// owner call of an allowance hub fulfillment
 /// @dev The contract holds no tokens between transactions. 1 wei of each token is retained.
-contract ZapUniswapV2Settler is IZapUniswapV2Settler, ImmutableState, ReentrancyGuardTransient {
+contract ZapUniswapV2Settler is
+  IZapUniswapV2Settler,
+  ImmutableState,
+  ZapAgainHelperCaller,
+  ReentrancyGuardTransient
+{
   using TokenHelper for address;
   using CommonLibrary for *;
 
@@ -157,76 +162,21 @@ contract ZapUniswapV2Settler is IZapUniswapV2Settler, ImmutableState, Reentrancy
     }
   }
 
-  /// @dev Swaps the remaining amounts as the helper previews and mints them into the pair
+  /// @dev Swaps the remaining amounts through the helper and mints them into the pair
   function _zapAgain(
     ZapInParams calldata params,
     ZapInState memory state,
     ZapInResult memory zapInResult,
     bytes memory fixedParams
   ) internal {
-    PreviewZapInResult memory preview = abi.decode(
-      IZapPreviewHelper(params.helper)
-        .previewZapIn(
-          fixedParams,
-          abi.encode(PreviewZapInVariableParams({amount0: state.amount0, amount1: state.amount1}))
-        ),
-      (PreviewZapInResult)
+    PoolSwapResult memory swapResult = abi.decode(
+      _poolSwap(params.helper, fixedParams, abi.encode(PoolSwapVariableParams({extraData: ''}))),
+      (PoolSwapResult)
     );
 
-    bool swapped = preview.amount0Delta < 0 || preview.amount1Delta < 0;
-    if (swapped) {
-      bool zeroForOne = preview.amount0Delta < 0;
-      _swap(
-        params,
-        zeroForOne ? state.token0 : state.token1,
-        zeroForOne,
-        uint256(-(zeroForOne ? preview.amount0Delta : preview.amount1Delta)),
-        uint256(zeroForOne ? preview.amount1Delta : preview.amount0Delta)
-      );
-    }
+    state.amount0 = swapResult.amount0;
+    state.amount1 = swapResult.amount1;
 
-    if (swapped && params.readBalanceFlag) {
-      state.amount0 = state.token0.selfBalanceMinusOne();
-      state.amount1 = state.token1.selfBalanceMinusOne();
-      _mint(params, state, zapInResult, fixedParams);
-    } else {
-      state.amount0 = state.amount0.addDelta(preview.amount0Delta);
-      state.amount1 = state.amount1.addDelta(preview.amount1Delta);
-      _mintAmounts(
-        params, state, zapInResult, preview.liquidity, preview.addedAmount0, preview.addedAmount1
-      );
-    }
-  }
-
-  /// @dev Swaps `swappedAmount` of `tokenIn` on the pair; with `readBalanceFlag` the amounts are
-  /// recomputed from the pair balance received
-  function _swap(
-    ZapInParams calldata params,
-    address tokenIn,
-    bool zeroForOne,
-    uint256 swappedAmount,
-    uint256 returnedAmount
-  ) internal {
-    uint256 reserveIn;
-    uint256 reserveOut;
-    if (params.readBalanceFlag) {
-      (uint256 reserve0, uint256 reserve1,) = IUniswapV2Pair(params.pool).getReserves();
-      (reserveIn, reserveOut) = zeroForOne ? (reserve0, reserve1) : (reserve1, reserve0);
-    }
-
-    tokenIn.safeTransfer(params.pool, swappedAmount);
-
-    if (params.readBalanceFlag) {
-      swappedAmount = tokenIn.balanceOf(params.pool) - reserveIn;
-      returnedAmount = UniswapV2Library.getAmountOut(
-        swappedAmount, reserveIn, reserveOut, params.swapFee, params.feeDenominator
-      );
-    }
-
-    if (zeroForOne) {
-      IUniswapV2Pair(params.pool).swap(0, returnedAmount, address(this), '');
-    } else {
-      IUniswapV2Pair(params.pool).swap(returnedAmount, 0, address(this), '');
-    }
+    _mint(params, state, zapInResult, fixedParams);
   }
 }

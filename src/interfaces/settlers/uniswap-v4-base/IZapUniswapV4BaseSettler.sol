@@ -19,7 +19,8 @@ interface IZapUniswapV4BaseSettler is IZapSettler, IZapUniswapV4BaseHelperTypes 
 
   /**
    * @notice Parameters of the swap and the second liquidity addition with the remaining tokens
-   * @param helper The helper queried for the swap; the zero address disables the zap again
+   * @param helper The helper delegatecalled for the pool swap of the zap again; the zero address
+   * disables the zap again
    * @param minZapInAmounts The remaining amounts of token0 and token1 from which the zap again runs;
    * it runs when either remaining amount is at least its minimum
    * @param sqrtPriceLimit0X96 The lower sqrt price limit of the swap preview

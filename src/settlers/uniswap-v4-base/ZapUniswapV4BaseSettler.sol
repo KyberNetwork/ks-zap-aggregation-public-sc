@@ -2,24 +2,20 @@
 pragma solidity 0.8.30;
 
 import {IKSGenericRouter} from '../../interfaces/IKSGenericRouter.sol';
-import {IZapPreviewHelper} from '../../interfaces/settlers/IZapPreviewHelper.sol';
 import {
   IZapUniswapV4BaseSettler
 } from '../../interfaces/settlers/uniswap-v4-base/IZapUniswapV4BaseSettler.sol';
 
 import {ImmutableState} from '../../base/ImmutableState.sol';
+import {ZapAgainHelperCaller} from '../../base/ZapAgainHelperCaller.sol';
 import {CommonLibrary} from '../../libraries/CommonLibrary.sol';
 import {Actions} from '../../vendors/uniswap-v4/Actions.sol';
-import {BalanceDelta} from '../../vendors/uniswap-v4/BalanceDelta.sol';
-import {CurrencySettler} from '../../vendors/uniswap-v4/CurrencySettler.sol';
 import {IPoolManager} from '../../vendors/uniswap-v4/IPoolManager.sol';
 import {IPositionManager} from '../../vendors/uniswap-v4/IPositionManager.sol';
 import {LiquidityAmounts} from '../../vendors/uniswap-v4/LiquidityAmounts.sol';
-import {SwapParams} from '../../vendors/uniswap-v4/PoolOperation.sol';
 import {SqrtPriceMath} from '../../vendors/uniswap-v4/SqrtPriceMath.sol';
 import {StateLibrary} from '../../vendors/uniswap-v4/StateLibrary.sol';
 import {TickMath} from '../../vendors/uniswap-v4/TickMath.sol';
-import {TransientStateLibrary} from '../../vendors/uniswap-v4/TransientStateLibrary.sol';
 
 import {IAllowanceTransfer} from 'ks-common-sc/src/interfaces/IAllowanceTransfer.sol';
 import {TokenHelper} from 'ks-common-sc/src/libraries/token/TokenHelper.sol';
@@ -39,14 +35,13 @@ import {TransientSlot} from 'openzeppelin-contracts/contracts/utils/TransientSlo
 contract ZapUniswapV4BaseSettler is
   IZapUniswapV4BaseSettler,
   ImmutableState,
+  ZapAgainHelperCaller,
   ReentrancyGuardTransient
 {
   using TokenHelper for address;
   using CommonLibrary for *;
   using TransientSlot for *;
   using StateLibrary for IPoolManager;
-  using TransientStateLibrary for IPoolManager;
-  using CurrencySettler for address;
 
   /// @dev Transient slot holding the pool manager of the ongoing zap in
   bytes32 private constant POOL_MANAGER_SLOT =
@@ -305,92 +300,42 @@ contract ZapUniswapV4BaseSettler is
     }
   }
 
-  /// @dev Swaps the remaining amounts as the helper previews and adds them to the position
+  /// @dev Swaps the remaining amounts through the helper and adds them to the position
   function _zapAgain(
     ZapInParams calldata params,
     ZapInState memory state,
     ZapInResult memory zapInResult
   ) internal {
-    PreviewZapInResult memory preview = abi.decode(
-      IZapPreviewHelper(params.zapAgain.helper)
-        .previewZapIn(
-          abi.encode(
-            ZapInFixedParams({
-              posManager: params.posManager,
-              poolManager: params.poolManager,
-              poolKey: params.poolKey,
-              tickLower: params.tickLower,
-              tickUpper: params.tickUpper,
-              sqrtPriceLimit0X96: params.zapAgain.sqrtPriceLimit0X96,
-              sqrtPriceLimit1X96: params.zapAgain.sqrtPriceLimit1X96,
-              iterations: params.zapAgain.iterations,
-              swapHookData: '',
-              addLiquidityHookData: '',
-              optimizer: address(0),
-              optimizeFixedParams: '',
-              readBalanceFlag: false
-            })
-          ),
-          abi.encode(PreviewZapInVariableParams({amount0: state.amount0, amount1: state.amount1}))
+    PoolSwapResult memory swapResult = abi.decode(
+      _poolSwap(
+        params.zapAgain.helper,
+        abi.encode(
+          ZapInFixedParams({
+            posManager: params.posManager,
+            poolManager: params.poolManager,
+            poolKey: params.poolKey,
+            tickLower: params.tickLower,
+            tickUpper: params.tickUpper,
+            sqrtPriceLimit0X96: params.zapAgain.sqrtPriceLimit0X96,
+            sqrtPriceLimit1X96: params.zapAgain.sqrtPriceLimit1X96,
+            iterations: params.zapAgain.iterations,
+            swapHookData: params.zapAgain.swapHookData,
+            addLiquidityHookData: '',
+            optimizer: address(0),
+            optimizeFixedParams: '',
+            readBalanceFlag: params.readBalanceFlag
+          })
         ),
-      (PreviewZapInResult)
+        abi.encode(PoolSwapVariableParams({extraData: ''}))
+      ),
+      (PoolSwapResult)
     );
 
-    if (preview.sqrtPriceX96 != preview.sqrtPriceStartX96) {
-      bool zeroForOne = preview.sqrtPriceX96 < preview.sqrtPriceStartX96;
-      address currencyIn = zeroForOne ? params.poolKey.currency0 : params.poolKey.currency1;
-      uint256 amountIn = zeroForOne ? state.amount0 : state.amount1;
+    state.amount0 = swapResult.amount0;
+    state.amount1 = swapResult.amount1;
 
-      if (params.readBalanceFlag) {
-        currencyIn.settle(state.poolManager, address(this), amountIn, false);
-        amountIn = uint256(state.poolManager.currencyDelta(address(this), currencyIn));
-      }
-
-      BalanceDelta delta = state.poolManager
-        .swap(
-          params.poolKey,
-          SwapParams({
-            zeroForOne: zeroForOne,
-            amountSpecified: -int256(amountIn),
-            sqrtPriceLimitX96: preview.sqrtPriceX96
-          }),
-          params.zapAgain.swapHookData
-        );
-
-      if (params.readBalanceFlag) {
-        _close(
-          state.poolManager,
-          params.poolKey.currency0,
-          state.poolManager.currencyDelta(address(this), params.poolKey.currency0)
-        );
-        _close(
-          state.poolManager,
-          params.poolKey.currency1,
-          state.poolManager.currencyDelta(address(this), params.poolKey.currency1)
-        );
-
-        state.amount0 = params.poolKey.currency0.selfBalanceMinusOne();
-        state.amount1 = params.poolKey.currency1.selfBalanceMinusOne();
-      } else {
-        state.amount0 = state.amount0.addDelta(delta.amount0());
-        state.amount1 = state.amount1.addDelta(delta.amount1());
-
-        _close(state.poolManager, params.poolKey.currency0, delta.amount0());
-        _close(state.poolManager, params.poolKey.currency1, delta.amount1());
-      }
-    }
-
-    if (preview.positionLiquidity != 0) {
+    if (swapResult.positionLiquidity != 0) {
       _addLiquidity(params, state, zapInResult);
-    }
-  }
-
-  /// @dev Pays the pool manager a negative delta of this contract and takes a positive one
-  function _close(IPoolManager poolManager, address currency, int256 delta) internal {
-    if (delta < 0) {
-      currency.settle(poolManager, address(this), uint256(-delta), false);
-    } else if (delta > 0) {
-      currency.take(poolManager, address(this), uint256(delta), false);
     }
   }
 

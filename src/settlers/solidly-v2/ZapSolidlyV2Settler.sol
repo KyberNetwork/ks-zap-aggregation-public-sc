@@ -5,10 +5,10 @@ import {IKSGenericRouter} from '../../interfaces/IKSGenericRouter.sol';
 import {
   IZapAddLiquidityPreviewHelper
 } from '../../interfaces/settlers/IZapAddLiquidityPreviewHelper.sol';
-import {IZapPreviewHelper} from '../../interfaces/settlers/IZapPreviewHelper.sol';
 import {IZapSolidlyV2Settler} from '../../interfaces/settlers/solidly-v2/IZapSolidlyV2Settler.sol';
 
 import {ImmutableState} from '../../base/ImmutableState.sol';
+import {ZapAgainHelperCaller} from '../../base/ZapAgainHelperCaller.sol';
 import {CommonLibrary} from '../../libraries/CommonLibrary.sol';
 import {ISolidlyV2Pair} from '../../vendors/solidly-v2/ISolidlyV2Pair.sol';
 
@@ -23,7 +23,12 @@ import {
 /// owner call of an allowance hub fulfillment
 /// @dev The contract holds no tokens between transactions. 1 wei of each token is retained. The
 /// contract serves every Solidly V2 fork through the helper of that fork.
-contract ZapSolidlyV2Settler is IZapSolidlyV2Settler, ImmutableState, ReentrancyGuardTransient {
+contract ZapSolidlyV2Settler is
+  IZapSolidlyV2Settler,
+  ImmutableState,
+  ZapAgainHelperCaller,
+  ReentrancyGuardTransient
+{
   using TokenHelper for address;
   using CommonLibrary for *;
 
@@ -148,73 +153,20 @@ contract ZapSolidlyV2Settler is IZapSolidlyV2Settler, ImmutableState, Reentrancy
     }
   }
 
-  /// @dev Swaps the remaining amounts as the helper previews and mints them into the pair
+  /// @dev Swaps the remaining amounts through the helper and mints them into the pair
   function _zapAgain(
     ZapInParams calldata params,
     ZapInState memory state,
     ZapInResult memory zapInResult,
     bytes memory fixedParams
   ) internal {
-    PreviewZapInResult memory preview = abi.decode(
-      IZapPreviewHelper(params.helper)
-        .previewZapIn(
-          fixedParams,
-          abi.encode(PreviewZapInVariableParams({amount0: state.amount0, amount1: state.amount1}))
-        ),
-      (PreviewZapInResult)
+    PoolSwapResult memory swapResult = abi.decode(
+      _poolSwap(params.helper, fixedParams, ''), (PoolSwapResult)
     );
 
-    bool swapped = preview.amount0Delta < 0 || preview.amount1Delta < 0;
-    if (swapped) {
-      bool zeroForOne = preview.amount0Delta < 0;
-      _swap(
-        params,
-        zeroForOne ? state.token0 : state.token1,
-        zeroForOne,
-        uint256(-(zeroForOne ? preview.amount0Delta : preview.amount1Delta)),
-        uint256(zeroForOne ? preview.amount1Delta : preview.amount0Delta)
-      );
-    }
+    state.amount0 = swapResult.amount0;
+    state.amount1 = swapResult.amount1;
 
-    if (swapped && params.readBalanceFlag) {
-      state.amount0 = state.token0.selfBalanceMinusOne();
-      state.amount1 = state.token1.selfBalanceMinusOne();
-      _mint(params, state, zapInResult, fixedParams);
-    } else {
-      state.amount0 = state.amount0.addDelta(preview.amount0Delta);
-      state.amount1 = state.amount1.addDelta(preview.amount1Delta);
-      _mintAmounts(
-        params, state, zapInResult, preview.liquidity, preview.addedAmount0, preview.addedAmount1
-      );
-    }
-  }
-
-  /// @dev Swaps `swappedAmount` of `tokenIn` on the pair; with `readBalanceFlag` the amounts are
-  /// recomputed from the pair balance received
-  function _swap(
-    ZapInParams calldata params,
-    address tokenIn,
-    bool zeroForOne,
-    uint256 swappedAmount,
-    uint256 returnedAmount
-  ) internal {
-    uint256 reserveIn;
-    if (params.readBalanceFlag) {
-      (uint256 reserve0, uint256 reserve1,) = ISolidlyV2Pair(params.pool).getReserves();
-      reserveIn = zeroForOne ? reserve0 : reserve1;
-    }
-
-    tokenIn.safeTransfer(params.pool, swappedAmount);
-
-    if (params.readBalanceFlag) {
-      swappedAmount = tokenIn.balanceOf(params.pool) - reserveIn;
-      returnedAmount = ISolidlyV2Pair(params.pool).getAmountOut(swappedAmount, tokenIn);
-    }
-
-    if (zeroForOne) {
-      ISolidlyV2Pair(params.pool).swap(0, returnedAmount, address(this), '');
-    } else {
-      ISolidlyV2Pair(params.pool).swap(returnedAmount, 0, address(this), '');
-    }
+    _mint(params, state, zapInResult, fixedParams);
   }
 }

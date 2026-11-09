@@ -2,36 +2,33 @@
 pragma solidity 0.8.30;
 
 import {IKSGenericRouter} from '../../interfaces/IKSGenericRouter.sol';
-import {IZapPreviewHelper} from '../../interfaces/settlers/IZapPreviewHelper.sol';
 import {IZapArrakisV2Settler} from '../../interfaces/settlers/arrakis-v2/IZapArrakisV2Settler.sol';
 
 import {ImmutableState} from '../../base/ImmutableState.sol';
+import {ZapAgainHelperCaller} from '../../base/ZapAgainHelperCaller.sol';
 import {CommonLibrary} from '../../libraries/CommonLibrary.sol';
 import {IArrakisV2Router} from '../../vendors/arrakis-v2/IArrakisV2Router.sol';
 import {IUniswapV3Pool} from '../../vendors/uniswap-v3/IUniswapV3Pool.sol';
 
-import {CalldataDecoder} from 'ks-common-sc/src/libraries/calldata/CalldataDecoder.sol';
 import {TokenHelper} from 'ks-common-sc/src/libraries/token/TokenHelper.sol';
 
 import {
   ReentrancyGuardTransient
 } from 'openzeppelin-contracts/contracts/utils/ReentrancyGuardTransient.sol';
-import {TransientSlot} from 'openzeppelin-contracts/contracts/utils/TransientSlot.sol';
 
 /// @title ZapArrakisV2Settler
 /// @notice Deposits into an Arrakis V2 vault with the token balances this contract holds, in an
 /// owner call of an allowance hub fulfillment
 /// @dev The contract holds no tokens between transactions. 1 wei of each token is retained. The
-/// swap callbacks are accepted only from the pool of the ongoing zap again swap.
-contract ZapArrakisV2Settler is IZapArrakisV2Settler, ImmutableState, ReentrancyGuardTransient {
-  using CalldataDecoder for bytes;
+/// swap callbacks of the zap again are forwarded to the helper.
+contract ZapArrakisV2Settler is
+  IZapArrakisV2Settler,
+  ImmutableState,
+  ZapAgainHelperCaller,
+  ReentrancyGuardTransient
+{
   using TokenHelper for address;
   using CommonLibrary for *;
-  using TransientSlot for *;
-
-  /// @dev Transient slot holding the pool of the ongoing zap again swap
-  bytes32 private constant SWAP_POOL_SLOT =
-    bytes32(uint256(keccak256('ks.zap.settler.arrakis-v2.swap-pool')) - 1);
 
   /// @dev Tokens and amounts of a zap in
   struct ZapInState {
@@ -45,6 +42,11 @@ contract ZapArrakisV2Settler is IZapArrakisV2Settler, ImmutableState, Reentrancy
 
   /// @dev Allows the contract to receive native tokens
   receive() external payable {}
+
+  /// @dev Forwards the swap callbacks of the pool swap of the zap again to the helper
+  fallback() external {
+    _forwardSwapCallback();
+  }
 
   /// @inheritdoc IKSGenericRouter
   function ksExecute(bytes calldata data) external payable nonReentrant returns (bytes memory) {
@@ -105,27 +107,6 @@ contract ZapArrakisV2Settler is IZapArrakisV2Settler, ImmutableState, Reentrancy
     return result;
   }
 
-  /// @inheritdoc IZapArrakisV2Settler
-  function uniswapV3SwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata data)
-    external
-  {
-    _paySwap(amount0Delta, amount1Delta, data);
-  }
-
-  /// @inheritdoc IZapArrakisV2Settler
-  function algebraSwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata data)
-    external
-  {
-    _paySwap(amount0Delta, amount1Delta, data);
-  }
-
-  /// @inheritdoc IZapArrakisV2Settler
-  function ramsesV2SwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata data)
-    external
-  {
-    _paySwap(amount0Delta, amount1Delta, data);
-  }
-
   /// @dev Deposits the amounts in `state` into the vault and records the deposit in `zapInResult`
   function _addLiquidity(
     ZapInParams calldata params,
@@ -143,50 +124,35 @@ contract ZapArrakisV2Settler is IZapArrakisV2Settler, ImmutableState, Reentrancy
     }
   }
 
-  /// @dev Swaps the remaining amounts as the helper previews and deposits them into the vault
+  /// @dev Swaps the remaining amounts through the helper and deposits them into the vault
   function _zapAgain(
     ZapInParams calldata params,
     ZapInState memory state,
     ZapInResult memory zapInResult
   ) internal {
-    PreviewZapInResult memory preview = abi.decode(
-      IZapPreviewHelper(params.zapAgain.helper)
-        .previewZapIn(
-          abi.encode(
-            ZapInFixedParams({
-              vault: params.vault,
-              pool: params.pool,
-              router: params.router,
-              gauge: params.gauge,
-              sqrtPriceLimit0X96: params.zapAgain.sqrtPriceLimit0X96,
-              sqrtPriceLimit1X96: params.zapAgain.sqrtPriceLimit1X96,
-              iterations: params.zapAgain.iterations
-            })
-          ),
-          abi.encode(PreviewZapInVariableParams({amount0: state.amount0, amount1: state.amount1}))
+    PoolSwapResult memory swapResult = abi.decode(
+      _poolSwap(
+        params.zapAgain.helper,
+        abi.encode(
+          ZapInFixedParams({
+            vault: params.vault,
+            pool: params.pool,
+            router: params.router,
+            gauge: params.gauge,
+            sqrtPriceLimit0X96: params.zapAgain.sqrtPriceLimit0X96,
+            sqrtPriceLimit1X96: params.zapAgain.sqrtPriceLimit1X96,
+            iterations: params.zapAgain.iterations
+          })
         ),
-      (PreviewZapInResult)
+        abi.encode(PoolSwapVariableParams({offchainData: ''}))
+      ),
+      (PoolSwapResult)
     );
 
-    if (preview.sqrtPriceX96 != preview.sqrtPriceStartX96) {
-      bool zeroForOne = preview.sqrtPriceX96 < preview.sqrtPriceStartX96;
+    state.amount0 = swapResult.amount0;
+    state.amount1 = swapResult.amount1;
 
-      SWAP_POOL_SLOT.asAddress().tstore(params.pool);
-      (int256 amount0Delta, int256 amount1Delta) = IUniswapV3Pool(params.pool)
-        .swap(
-          address(this),
-          zeroForOne,
-          int256(zeroForOne ? state.amount0 : state.amount1),
-          preview.sqrtPriceX96,
-          abi.encode(state.token0, state.token1)
-        );
-      SWAP_POOL_SLOT.asAddress().tstore(address(0));
-
-      state.amount0 = state.amount0.subDelta(amount0Delta);
-      state.amount1 = state.amount1.subDelta(amount1Delta);
-    }
-
-    if (preview.shares != 0) {
+    if (swapResult.shares != 0) {
       _addLiquidity(params, state, zapInResult);
     }
   }
@@ -215,19 +181,5 @@ contract ZapArrakisV2Settler is IZapArrakisV2Settler, ImmutableState, Reentrancy
   /// @dev Returns the contract approved to pull the tokens of the deposit
   function _approveTarget(ZapInParams calldata params) internal pure virtual returns (address) {
     return params.router;
-  }
-
-  /// @dev Pays the pool the token owed for the swap of the zap again
-  function _paySwap(int256 amount0Delta, int256 amount1Delta, bytes calldata data) internal {
-    require(msg.sender == SWAP_POOL_SLOT.asAddress().tload(), InvalidSwapCallbackCaller(msg.sender));
-
-    address token0 = data.decodeAddress(0);
-    address token1 = data.decodeAddress(1);
-
-    if (amount0Delta > 0) {
-      token0.safeTransfer(msg.sender, uint256(amount0Delta));
-    } else {
-      token1.safeTransfer(msg.sender, uint256(amount1Delta));
-    }
   }
 }

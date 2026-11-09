@@ -51,4 +51,18 @@ interface IZapSolidlyV2HelperTypes {
     uint256 addedAmount0;
     uint256 addedAmount1;
   }
+
+  /**
+   * @notice The result of the pool swap of a Solidly V2 zap
+   * @param originalAmount0 The amount of token0 before the swap
+   * @param originalAmount1 The amount of token1 before the swap
+   * @param amount0 The amount of token0 after the swap
+   * @param amount1 The amount of token1 after the swap
+   */
+  struct PoolSwapResult {
+    uint256 originalAmount0;
+    uint256 originalAmount1;
+    uint256 amount0;
+    uint256 amount1;
+  }
 }

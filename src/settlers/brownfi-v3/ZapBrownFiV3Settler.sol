@@ -5,10 +5,10 @@ import {IKSGenericRouter} from '../../interfaces/IKSGenericRouter.sol';
 import {
   IZapAddLiquidityPreviewHelper
 } from '../../interfaces/settlers/IZapAddLiquidityPreviewHelper.sol';
-import {IZapPreviewHelper} from '../../interfaces/settlers/IZapPreviewHelper.sol';
 import {IZapBrownFiV3Settler} from '../../interfaces/settlers/brownfi-v3/IZapBrownFiV3Settler.sol';
 
 import {ImmutableState} from '../../base/ImmutableState.sol';
+import {ZapAgainHelperCaller} from '../../base/ZapAgainHelperCaller.sol';
 import {CommonLibrary} from '../../libraries/CommonLibrary.sol';
 import {IBrownFiV3Pair} from '../../vendors/brownfi-v3/IBrownFiV3Pair.sol';
 
@@ -22,7 +22,12 @@ import {
 /// @notice Adds liquidity to a BrownFi V3 pair with the token balances this contract holds, in an
 /// owner call of an allowance hub fulfillment
 /// @dev The contract holds no tokens between transactions. 1 wei of each token is retained.
-contract ZapBrownFiV3Settler is IZapBrownFiV3Settler, ImmutableState, ReentrancyGuardTransient {
+contract ZapBrownFiV3Settler is
+  IZapBrownFiV3Settler,
+  ImmutableState,
+  ZapAgainHelperCaller,
+  ReentrancyGuardTransient
+{
   using TokenHelper for address;
   using CommonLibrary for *;
 
@@ -142,39 +147,20 @@ contract ZapBrownFiV3Settler is IZapBrownFiV3Settler, ImmutableState, Reentrancy
     }
   }
 
-  /// @dev Swaps the remaining amounts as the helper previews and mints them into the pair
+  /// @dev Swaps the remaining amounts through the helper and mints them into the pair
   function _zapAgain(
     ZapInParams calldata params,
     ZapInState memory state,
     ZapInResult memory zapInResult,
     bytes memory fixedParams
   ) internal {
-    PreviewZapInResult memory preview = abi.decode(
-      IZapPreviewHelper(params.helper)
-        .previewZapIn(
-          fixedParams,
-          abi.encode(PreviewZapInVariableParams({amount0: state.amount0, amount1: state.amount1}))
-        ),
-      (PreviewZapInResult)
+    PoolSwapResult memory swapResult = abi.decode(
+      _poolSwap(params.helper, fixedParams, ''), (PoolSwapResult)
     );
 
-    if (preview.amount0Delta < 0 || preview.amount1Delta < 0) {
-      bool zeroForOne = preview.amount0Delta < 0;
-      (address tokenIn, uint256 swappedAmount, uint256 returnedAmount) = zeroForOne
-        ? (state.token0, uint256(-preview.amount0Delta), uint256(preview.amount1Delta))
-        : (state.token1, uint256(-preview.amount1Delta), uint256(preview.amount0Delta));
+    state.amount0 = swapResult.amount0;
+    state.amount1 = swapResult.amount1;
 
-      tokenIn.safeTransfer(params.pool, swappedAmount);
-      IBrownFiV3Pair(params.pool)
-        .swap(zeroForOne ? 0 : returnedAmount, zeroForOne ? returnedAmount : 0, address(this));
-
-      state.amount0 = state.token0.selfBalanceMinusOne();
-      state.amount1 = state.token1.selfBalanceMinusOne();
-      _mint(params, state, zapInResult, fixedParams);
-    } else {
-      _mintAmounts(
-        params, state, zapInResult, preview.liquidity, preview.addedAmount0, preview.addedAmount1
-      );
-    }
+    _mint(params, state, zapInResult, fixedParams);
   }
 }
