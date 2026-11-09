@@ -12,20 +12,12 @@ import {ILiquidRefer} from '../../vendors/etherfi/ILiquidRefer.sol';
 
 import {TokenHelper} from 'ks-common-sc/src/libraries/token/TokenHelper.sol';
 
-import {
-  ReentrancyGuardTransient
-} from 'openzeppelin-contracts/contracts/utils/ReentrancyGuardTransient.sol';
-
 /// @title ZapEtherFiLiquidVaultSettler
 /// @notice Deposits the token balance this contract holds into an ether.fi Liquid vault, in an
 /// owner call of an allowance hub fulfillment
 /// @dev The contract holds no tokens between transactions. 1 wei of the deposited token is
 /// retained.
-contract ZapEtherFiLiquidVaultSettler is
-  IZapEtherFiLiquidVaultSettler,
-  ImmutableState,
-  ReentrancyGuardTransient
-{
+contract ZapEtherFiLiquidVaultSettler is IZapEtherFiLiquidVaultSettler, ImmutableState {
   using TokenHelper for address;
   using CommonLibrary for *;
 
@@ -35,7 +27,7 @@ contract ZapEtherFiLiquidVaultSettler is
   receive() external payable {}
 
   /// @inheritdoc IKSGenericRouter
-  function ksExecute(bytes calldata data) external payable nonReentrant returns (bytes memory) {
+  function ksExecute(bytes calldata data) external payable returns (bytes memory) {
     ZapInParams calldata params;
     assembly ('memory-safe') {
       params := data.offset

@@ -14,21 +14,12 @@ import {ISolidlyV2Pair} from '../../vendors/solidly-v2/ISolidlyV2Pair.sol';
 
 import {TokenHelper} from 'ks-common-sc/src/libraries/token/TokenHelper.sol';
 
-import {
-  ReentrancyGuardTransient
-} from 'openzeppelin-contracts/contracts/utils/ReentrancyGuardTransient.sol';
-
 /// @title ZapSolidlyV2Settler
 /// @notice Adds liquidity to a Solidly V2 pair with the token balances this contract holds, in an
 /// owner call of an allowance hub fulfillment
 /// @dev The contract holds no tokens between transactions. 1 wei of each token is retained. The
 /// contract serves every Solidly V2 fork through the helper of that fork.
-contract ZapSolidlyV2Settler is
-  IZapSolidlyV2Settler,
-  ImmutableState,
-  ZapAgainHelperCaller,
-  ReentrancyGuardTransient
-{
+contract ZapSolidlyV2Settler is IZapSolidlyV2Settler, ImmutableState, ZapAgainHelperCaller {
   using TokenHelper for address;
   using CommonLibrary for *;
 
@@ -46,7 +37,7 @@ contract ZapSolidlyV2Settler is
   receive() external payable {}
 
   /// @inheritdoc IKSGenericRouter
-  function ksExecute(bytes calldata data) external payable nonReentrant returns (bytes memory) {
+  function ksExecute(bytes calldata data) external payable returns (bytes memory) {
     ZapInParams calldata params;
     assembly ('memory-safe') {
       params := data.offset

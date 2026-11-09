@@ -23,30 +23,19 @@ import {IAllowanceTransfer} from 'ks-common-sc/src/interfaces/IAllowanceTransfer
 import {TokenHelper} from 'ks-common-sc/src/libraries/token/TokenHelper.sol';
 
 import {IERC721} from 'openzeppelin-contracts/contracts/token/ERC721/IERC721.sol';
-import {
-  ReentrancyGuardTransient
-} from 'openzeppelin-contracts/contracts/utils/ReentrancyGuardTransient.sol';
-import {TransientSlot} from 'openzeppelin-contracts/contracts/utils/TransientSlot.sol';
 
 /// @title ZapPancakeInfinityBaseSettler
 /// @notice Adds liquidity to a Pancake Infinity CL position with the token balances this contract
 /// holds, in an owner call of an allowance hub fulfillment
 /// @dev The contract holds no tokens between transactions. 1 wei of each token is retained. A new
-/// position is minted to this contract and transferred to the recipient after the lock. The lock
-/// callback is accepted only from the vault of the ongoing zap in.
+/// position is minted to this contract and transferred to the recipient after the lock.
 contract ZapPancakeInfinityBaseSettler is
   IZapPancakeInfinityBaseSettler,
   ImmutableState,
-  ZapAgainHelperCaller,
-  ReentrancyGuardTransient
+  ZapAgainHelperCaller
 {
   using TokenHelper for address;
   using CommonLibrary for *;
-  using TransientSlot for *;
-
-  /// @dev Transient slot holding the vault of the ongoing zap in
-  bytes32 private constant VAULT_SLOT =
-    bytes32(uint256(keccak256('ks.zap.settler.pancake-infinity-base.vault')) - 1);
 
   /// @dev Pool, price bounds and amounts of a zap in
   struct ZapInState {
@@ -66,7 +55,7 @@ contract ZapPancakeInfinityBaseSettler is
   receive() external payable {}
 
   /// @inheritdoc IKSGenericRouter
-  function ksExecute(bytes calldata data) external payable nonReentrant returns (bytes memory) {
+  function ksExecute(bytes calldata data) external payable returns (bytes memory) {
     ZapInParams calldata params;
     assembly ('memory-safe') {
       params := add(data.offset, calldataload(data.offset))
@@ -90,9 +79,7 @@ contract ZapPancakeInfinityBaseSettler is
       }
     }
 
-    VAULT_SLOT.asAddress().tstore(params.vault);
     bytes memory ret = IVault(params.vault).lock(data);
-    VAULT_SLOT.asAddress().tstore(address(0));
 
     ZapInResult memory zapInResult = abi.decode(ret, (ZapInResult));
 
@@ -127,8 +114,6 @@ contract ZapPancakeInfinityBaseSettler is
 
   /// @inheritdoc IZapPancakeInfinityBaseSettler
   function lockAcquired(bytes calldata data) external returns (bytes memory) {
-    require(msg.sender == VAULT_SLOT.asAddress().tload(), InvalidLockAcquiredCaller(msg.sender));
-
     ZapInParams calldata params;
     assembly ('memory-safe') {
       params := add(data.offset, calldataload(data.offset))

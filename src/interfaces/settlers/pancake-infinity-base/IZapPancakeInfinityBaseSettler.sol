@@ -15,9 +15,6 @@ interface IZapPancakeInfinityBaseSettler is IZapSettler, IZapPancakeInfinityBase
   /// @notice Thrown when the added liquidity is below the minimum
   error ZapInPancakeInfinityInsufficientLiquidity();
 
-  /// @notice Thrown when the lock callback is not called by the vault of the ongoing zap in
-  error InvalidLockAcquiredCaller(address caller);
-
   /**
    * @notice Parameters of the swap and the second liquidity addition with the remaining tokens
    * @param helper The helper delegatecalled for the pool swap of the zap again; the zero address

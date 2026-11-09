@@ -12,15 +12,11 @@ import {ICurveTwocrypto} from '../../vendors/curve/ICurveTwocrypto.sol';
 
 import {TokenHelper} from 'ks-common-sc/src/libraries/token/TokenHelper.sol';
 
-import {
-  ReentrancyGuardTransient
-} from 'openzeppelin-contracts/contracts/utils/ReentrancyGuardTransient.sol';
-
 /// @title ZapCurveSettler
 /// @notice Adds liquidity to a Curve pool with the token balances this contract holds, in an owner
 /// call of an allowance hub fulfillment
 /// @dev The contract holds no tokens between transactions. 1 wei of each token is retained.
-contract ZapCurveSettler is IZapCurveSettler, ImmutableState, ReentrancyGuardTransient {
+contract ZapCurveSettler is IZapCurveSettler, ImmutableState {
   using TokenHelper for address;
   using CommonLibrary for *;
 
@@ -30,7 +26,7 @@ contract ZapCurveSettler is IZapCurveSettler, ImmutableState, ReentrancyGuardTra
   receive() external payable {}
 
   /// @inheritdoc IKSGenericRouter
-  function ksExecute(bytes calldata data) external payable nonReentrant returns (bytes memory) {
+  function ksExecute(bytes calldata data) external payable returns (bytes memory) {
     ZapInParams calldata params;
     assembly ('memory-safe') {
       params := data.offset

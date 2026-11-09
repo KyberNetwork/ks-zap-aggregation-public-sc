@@ -21,31 +21,16 @@ import {IAllowanceTransfer} from 'ks-common-sc/src/interfaces/IAllowanceTransfer
 import {TokenHelper} from 'ks-common-sc/src/libraries/token/TokenHelper.sol';
 
 import {IERC721} from 'openzeppelin-contracts/contracts/token/ERC721/IERC721.sol';
-import {
-  ReentrancyGuardTransient
-} from 'openzeppelin-contracts/contracts/utils/ReentrancyGuardTransient.sol';
-import {TransientSlot} from 'openzeppelin-contracts/contracts/utils/TransientSlot.sol';
 
 /// @title ZapUniswapV4BaseSettler
 /// @notice Adds liquidity to a Uniswap V4 position with the token balances this contract holds, in
 /// an owner call of an allowance hub fulfillment
 /// @dev The contract holds no tokens between transactions. 1 wei of each token is retained. A new
-/// position is minted to this contract and transferred to the recipient after the unlock. The
-/// unlock callback is accepted only from the pool manager of the ongoing zap in.
-contract ZapUniswapV4BaseSettler is
-  IZapUniswapV4BaseSettler,
-  ImmutableState,
-  ZapAgainHelperCaller,
-  ReentrancyGuardTransient
-{
+/// position is minted to this contract and transferred to the recipient after the unlock.
+contract ZapUniswapV4BaseSettler is IZapUniswapV4BaseSettler, ImmutableState, ZapAgainHelperCaller {
   using TokenHelper for address;
   using CommonLibrary for *;
-  using TransientSlot for *;
   using StateLibrary for IPoolManager;
-
-  /// @dev Transient slot holding the pool manager of the ongoing zap in
-  bytes32 private constant POOL_MANAGER_SLOT =
-    bytes32(uint256(keccak256('ks.zap.settler.uniswap-v4-base.pool-manager')) - 1);
 
   /// @dev Pool, price bounds, position and amounts of a zap in
   struct ZapInState {
@@ -64,7 +49,7 @@ contract ZapUniswapV4BaseSettler is
   receive() external payable {}
 
   /// @inheritdoc IKSGenericRouter
-  function ksExecute(bytes calldata data) external payable nonReentrant returns (bytes memory) {
+  function ksExecute(bytes calldata data) external payable returns (bytes memory) {
     ZapInParams calldata params;
     assembly ('memory-safe') {
       params := add(data.offset, calldataload(data.offset))
@@ -89,9 +74,7 @@ contract ZapUniswapV4BaseSettler is
       }
     }
 
-    POOL_MANAGER_SLOT.asAddress().tstore(params.poolManager);
     bytes memory ret = IPoolManager(params.poolManager).unlock(data);
-    POOL_MANAGER_SLOT.asAddress().tstore(address(0));
 
     ZapInResult memory zapInResult = abi.decode(ret, (ZapInResult));
 
@@ -125,10 +108,6 @@ contract ZapUniswapV4BaseSettler is
 
   /// @inheritdoc IZapUniswapV4BaseSettler
   function unlockCallback(bytes calldata data) external returns (bytes memory) {
-    require(
-      msg.sender == POOL_MANAGER_SLOT.asAddress().tload(), InvalidUnlockCallbackCaller(msg.sender)
-    );
-
     ZapInParams calldata params;
     assembly ('memory-safe') {
       params := add(data.offset, calldataload(data.offset))

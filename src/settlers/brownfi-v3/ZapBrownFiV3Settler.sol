@@ -14,20 +14,11 @@ import {IBrownFiV3Pair} from '../../vendors/brownfi-v3/IBrownFiV3Pair.sol';
 
 import {TokenHelper} from 'ks-common-sc/src/libraries/token/TokenHelper.sol';
 
-import {
-  ReentrancyGuardTransient
-} from 'openzeppelin-contracts/contracts/utils/ReentrancyGuardTransient.sol';
-
 /// @title ZapBrownFiV3Settler
 /// @notice Adds liquidity to a BrownFi V3 pair with the token balances this contract holds, in an
 /// owner call of an allowance hub fulfillment
 /// @dev The contract holds no tokens between transactions. 1 wei of each token is retained.
-contract ZapBrownFiV3Settler is
-  IZapBrownFiV3Settler,
-  ImmutableState,
-  ZapAgainHelperCaller,
-  ReentrancyGuardTransient
-{
+contract ZapBrownFiV3Settler is IZapBrownFiV3Settler, ImmutableState, ZapAgainHelperCaller {
   using TokenHelper for address;
   using CommonLibrary for *;
 
@@ -45,7 +36,7 @@ contract ZapBrownFiV3Settler is
   receive() external payable {}
 
   /// @inheritdoc IKSGenericRouter
-  function ksExecute(bytes calldata data) external payable nonReentrant returns (bytes memory) {
+  function ksExecute(bytes calldata data) external payable returns (bytes memory) {
     ZapInParams calldata params;
     assembly ('memory-safe') {
       params := data.offset

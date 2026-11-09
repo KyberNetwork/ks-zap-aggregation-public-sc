@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {IZapAgainHelperCaller} from '../interfaces/settlers/IZapAgainHelperCaller.sol';
 import {IZapPoolSwapHelper} from '../interfaces/settlers/IZapPoolSwapHelper.sol';
 import {MASK_BYTES_4} from '../libraries/BitMask.sol';
 
@@ -13,7 +12,7 @@ import {TransientSlot} from 'openzeppelin-contracts/contracts/utils/TransientSlo
 /// swap to the helper
 /// @dev The helper runs in the context of this contract with its balances and is chosen by the
 /// caller of `ksExecute`.
-abstract contract ZapAgainHelperCaller is IZapAgainHelperCaller {
+abstract contract ZapAgainHelperCaller {
   using TransientSlot for *;
 
   /// @dev Transient slot holding the helper of the ongoing pool swap
@@ -38,7 +37,6 @@ abstract contract ZapAgainHelperCaller is IZapAgainHelperCaller {
   /// data to the caller of this contract
   function _forwardCallback(bytes memory data) internal {
     address helper = ZAP_AGAIN_HELPER_SLOT.asAddress().tload();
-    require(helper != address(0), ZapAgainCallbackNotExpected(msg.sender));
 
     bytes memory returnData = Address.functionDelegateCall(helper, data);
     assembly ('memory-safe') {

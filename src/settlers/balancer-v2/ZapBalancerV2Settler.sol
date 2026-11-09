@@ -13,15 +13,12 @@ import {IVault} from '../../vendors/balancer-v2/IVault.sol';
 import {TokenHelper} from 'ks-common-sc/src/libraries/token/TokenHelper.sol';
 
 import {IERC20} from 'openzeppelin-contracts/contracts/token/ERC20/IERC20.sol';
-import {
-  ReentrancyGuardTransient
-} from 'openzeppelin-contracts/contracts/utils/ReentrancyGuardTransient.sol';
 
 /// @title ZapBalancerV2Settler
 /// @notice Adds liquidity to a Balancer V2 pool with the token balances this contract holds, in an
 /// owner call of an allowance hub fulfillment
 /// @dev The contract holds no tokens between transactions. 1 wei of each token is retained.
-contract ZapBalancerV2Settler is IZapBalancerV2Settler, ImmutableState, ReentrancyGuardTransient {
+contract ZapBalancerV2Settler is IZapBalancerV2Settler, ImmutableState {
   using TokenHelper for address;
   using CommonLibrary for *;
 
@@ -31,7 +28,7 @@ contract ZapBalancerV2Settler is IZapBalancerV2Settler, ImmutableState, Reentran
   receive() external payable {}
 
   /// @inheritdoc IKSGenericRouter
-  function ksExecute(bytes calldata data) external payable nonReentrant returns (bytes memory) {
+  function ksExecute(bytes calldata data) external payable returns (bytes memory) {
     ZapInParams calldata params;
     assembly ('memory-safe') {
       params := data.offset

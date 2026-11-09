@@ -12,21 +12,12 @@ import {IUniswapV3Pool} from '../../vendors/uniswap-v3/IUniswapV3Pool.sol';
 
 import {TokenHelper} from 'ks-common-sc/src/libraries/token/TokenHelper.sol';
 
-import {
-  ReentrancyGuardTransient
-} from 'openzeppelin-contracts/contracts/utils/ReentrancyGuardTransient.sol';
-
 /// @title ZapArrakisV2Settler
 /// @notice Deposits into an Arrakis V2 vault with the token balances this contract holds, in an
 /// owner call of an allowance hub fulfillment
 /// @dev The contract holds no tokens between transactions. 1 wei of each token is retained. The
 /// swap callbacks of the zap again are forwarded to the helper.
-contract ZapArrakisV2Settler is
-  IZapArrakisV2Settler,
-  ImmutableState,
-  ZapAgainHelperCaller,
-  ReentrancyGuardTransient
-{
+contract ZapArrakisV2Settler is IZapArrakisV2Settler, ImmutableState, ZapAgainHelperCaller {
   using TokenHelper for address;
   using CommonLibrary for *;
 
@@ -49,7 +40,7 @@ contract ZapArrakisV2Settler is
   }
 
   /// @inheritdoc IKSGenericRouter
-  function ksExecute(bytes calldata data) external payable nonReentrant returns (bytes memory) {
+  function ksExecute(bytes calldata data) external payable returns (bytes memory) {
     ZapInParams calldata params;
     assembly ('memory-safe') {
       params := data.offset

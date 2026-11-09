@@ -14,9 +14,6 @@ interface IZapUniswapV4BaseSettler is IZapSettler, IZapUniswapV4BaseHelperTypes 
   /// @notice Thrown when the added liquidity is below the minimum
   error ZapInUniswapV4InsufficientLiquidity();
 
-  /// @notice Thrown when the unlock callback is not called by the pool manager of the ongoing zap in
-  error InvalidUnlockCallbackCaller(address caller);
-
   /**
    * @notice Parameters of the swap and the second liquidity addition with the remaining tokens
    * @param helper The helper delegatecalled for the pool swap of the zap again; the zero address
