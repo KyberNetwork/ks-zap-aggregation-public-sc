@@ -120,6 +120,13 @@ contract ZapUniswapV3Settler is IZapUniswapV3Settler, ImmutableState, Reentrancy
   function uniswapV3SwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata data)
     external
   {
+    _paySwapCallback(amount0Delta, amount1Delta, data);
+  }
+
+  /// @dev Pays the pool of the ongoing zap again swap the token owed for the swap
+  function _paySwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata data)
+    internal
+  {
     require(msg.sender == SWAP_POOL_SLOT.asAddress().tload(), InvalidSwapCallbackCaller(msg.sender));
 
     address token0;
