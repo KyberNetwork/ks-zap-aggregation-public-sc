@@ -2,7 +2,7 @@
 pragma solidity 0.8.30;
 
 import {IKSZapExecutor} from './interfaces/IKSZapExecutor.sol';
-import {IKSZapRouterV3_1} from './interfaces/IKSZapRouterV3_1.sol';
+import {IKSZapRouterV3} from './interfaces/IKSZapRouterV3.sol';
 
 import {ZapParamsV3_1} from './types/ZapParamsV3_1.sol';
 
@@ -21,8 +21,9 @@ import {ECDSA} from 'openzeppelin-contracts/contracts/utils/cryptography/ECDSA.s
 /// @title KSZapRouterV3_1
 /// @notice Verifies a signed zap payload and delegatecalls its executor, in a solver call of an
 /// allowance hub fulfillment
+/// @dev It runs no validation and emits no `Zap` event.
 contract KSZapRouterV3_1 is
-  IKSZapRouterV3_1,
+  IKSZapRouterV3,
   Lock,
   ManagementPausable,
   ManagementRescuable,
@@ -59,7 +60,7 @@ contract KSZapRouterV3_1 is
     return EXECUTOR_SLOT.asAddress().tload().functionDelegateCall(data);
   }
 
-  /// @inheritdoc IKSZapRouterV3_1
+  /// @inheritdoc IKSZapRouterV3
   function ksExecute(bytes calldata data)
     external
     payable
@@ -85,8 +86,6 @@ contract KSZapRouterV3_1 is
     result = zapParams.executor
       .functionDelegateCall(abi.encodeCall(IKSZapExecutor.executeZap, (zapParams.executorData)));
 
-    emit Zap(zapParams.executor);
-
     if (zapParams.clientData.length > 0) {
       emit ClientData(zapParams.clientData);
     }
@@ -95,7 +94,7 @@ contract KSZapRouterV3_1 is
     EXECUTOR_SLOT.asAddress().tstore(address(0));
   }
 
-  /// @inheritdoc IKSZapRouterV3_1
+  /// @inheritdoc IKSZapRouterV3
   function msgSender() external view returns (address) {
     return _getLocker();
   }
