@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
-import {IZapSettler} from '../../interfaces/settlers/IZapSettler.sol';
+import {IKSGenericRouter} from '../../interfaces/IKSGenericRouter.sol';
 import {
   IZapBalancerV3Settler
 } from '../../interfaces/settlers/balancer-v3/IZapBalancerV3Settler.sol';
@@ -36,7 +36,7 @@ contract ZapBalancerV3Settler is IZapBalancerV3Settler, ImmutableState, Reentran
   /// @dev Allows the contract to receive native tokens
   receive() external payable {}
 
-  /// @inheritdoc IZapSettler
+  /// @inheritdoc IKSGenericRouter
   function ksExecute(bytes calldata data) external payable nonReentrant returns (bytes memory) {
     ZapInParams calldata params;
     assembly ('memory-safe') {

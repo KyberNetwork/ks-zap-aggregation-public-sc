@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
+import {IKSGenericRouter} from '../../interfaces/IKSGenericRouter.sol';
 import {IZapPreviewHelper} from '../../interfaces/settlers/IZapPreviewHelper.sol';
-import {IZapSettler} from '../../interfaces/settlers/IZapSettler.sol';
 import {
   IZapPancakeInfinityBaseSettler
 } from '../../interfaces/settlers/pancake-infinity-base/IZapPancakeInfinityBaseSettler.sol';
@@ -68,7 +68,7 @@ contract ZapPancakeInfinityBaseSettler is
   /// @dev Allows the contract to receive native tokens
   receive() external payable {}
 
-  /// @inheritdoc IZapSettler
+  /// @inheritdoc IKSGenericRouter
   function ksExecute(bytes calldata data) external payable nonReentrant returns (bytes memory) {
     ZapInParams calldata params;
     assembly ('memory-safe') {

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
+import {IKSGenericRouter} from '../../interfaces/IKSGenericRouter.sol';
 import {IZapPairPreviewHelper} from '../../interfaces/settlers/IZapPairPreviewHelper.sol';
 import {IZapPreviewHelper} from '../../interfaces/settlers/IZapPreviewHelper.sol';
-import {IZapSettler} from '../../interfaces/settlers/IZapSettler.sol';
 import {IZapBrownFiV3Settler} from '../../interfaces/settlers/brownfi-v3/IZapBrownFiV3Settler.sol';
 
 import {ImmutableState} from '../../base/ImmutableState.sol';
@@ -37,7 +37,7 @@ contract ZapBrownFiV3Settler is IZapBrownFiV3Settler, ImmutableState, Reentrancy
   /// @dev Allows the contract to receive native tokens
   receive() external payable {}
 
-  /// @inheritdoc IZapSettler
+  /// @inheritdoc IKSGenericRouter
   function ksExecute(bytes calldata data) external payable nonReentrant returns (bytes memory) {
     ZapInParams calldata params;
     assembly ('memory-safe') {

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
-import {IZapSettler} from '../../interfaces/settlers/IZapSettler.sol';
+import {IKSGenericRouter} from '../../interfaces/IKSGenericRouter.sol';
 import {
   IZapEtherFiLiquidVaultSettler
 } from '../../interfaces/settlers/etherfi/IZapEtherFiLiquidVaultSettler.sol';
@@ -34,7 +34,7 @@ contract ZapEtherFiLiquidVaultSettler is
   /// @dev Allows the contract to receive native tokens
   receive() external payable {}
 
-  /// @inheritdoc IZapSettler
+  /// @inheritdoc IKSGenericRouter
   function ksExecute(bytes calldata data) external payable nonReentrant returns (bytes memory) {
     ZapInParams calldata params;
     assembly ('memory-safe') {
