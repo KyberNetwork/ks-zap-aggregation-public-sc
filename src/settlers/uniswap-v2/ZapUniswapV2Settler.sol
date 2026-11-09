@@ -2,7 +2,9 @@
 pragma solidity 0.8.30;
 
 import {IKSGenericRouter} from '../../interfaces/IKSGenericRouter.sol';
-import {IZapPairPreviewHelper} from '../../interfaces/settlers/IZapPairPreviewHelper.sol';
+import {
+  IZapAddLiquidityPreviewHelper
+} from '../../interfaces/settlers/IZapAddLiquidityPreviewHelper.sol';
 import {IZapPreviewHelper} from '../../interfaces/settlers/IZapPreviewHelper.sol';
 import {IZapUniswapV2Settler} from '../../interfaces/settlers/uniswap-v2/IZapUniswapV2Settler.sol';
 
@@ -108,13 +110,13 @@ contract ZapUniswapV2Settler is IZapUniswapV2Settler, ImmutableState, Reentrancy
     ZapInResult memory zapInResult,
     bytes memory fixedParams
   ) internal {
-    IZapPairPreviewHelper.PreviewMintResult memory preview = abi.decode(
-      IZapPairPreviewHelper(params.helper)
-        .previewMint(
+    PreviewAddLiquidityResult memory preview = abi.decode(
+      IZapAddLiquidityPreviewHelper(params.helper)
+        .previewAddLiquidity(
           fixedParams,
           abi.encode(PreviewZapInVariableParams({amount0: state.amount0, amount1: state.amount1}))
         ),
-      (IZapPairPreviewHelper.PreviewMintResult)
+      (PreviewAddLiquidityResult)
     );
 
     _mintAmounts(
