@@ -47,7 +47,7 @@ abstract contract ZapAgainHelperCaller is IZapAgainHelperCaller {
   }
 
   /// @dev Forwards a swap callback of a Uniswap V3 fork to `uniswapV3SwapCallback` of the helper
-  function _forwardSwapCallback() internal {
+  function _forwardUniswapV3SwapCallback() internal {
     bytes memory data = msg.data;
     bytes4 selector = bytes4(keccak256('uniswapV3SwapCallback(int256,int256,bytes)'));
     assembly ('memory-safe') {

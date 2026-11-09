@@ -47,7 +47,7 @@ contract ZapUniswapV3Settler is
 
   /// @dev Forwards the swap callbacks of the pool swap of the zap again to the helper
   fallback() external {
-    _forwardSwapCallback();
+    _forwardUniswapV3SwapCallback();
   }
 
   /// @inheritdoc IKSGenericRouter
