@@ -144,26 +144,23 @@ contract ZapUniswapV3Settler is IZapUniswapV3Settler, ImmutableState, ZapAgainHe
     ZapInState memory state,
     ZapInResult memory zapInResult
   ) internal {
-    PoolSwapResult memory swapResult = abi.decode(
-      _poolSwap(
-        params.zapAgain.helper,
-        abi.encode(
-          ZapInFixedParams({
-            posManager: params.posManager,
-            pool: params.pool,
-            tickLower: params.tickLower,
-            tickUpper: params.tickUpper,
-            sqrtPriceLimit0X96: params.zapAgain.sqrtPriceLimit0X96,
-            sqrtPriceLimit1X96: params.zapAgain.sqrtPriceLimit1X96,
-            iterations: params.zapAgain.iterations,
-            optimizer: address(0),
-            optimizeFixedParams: ''
-          })
-        ),
-        abi.encode(PoolSwapVariableParams({extraData: ''}))
-      ),
-      (PoolSwapResult)
+    bytes memory fixedParams = abi.encode(
+      ZapInFixedParams({
+        posManager: params.posManager,
+        pool: params.pool,
+        tickLower: params.tickLower,
+        tickUpper: params.tickUpper,
+        sqrtPriceLimit0X96: params.zapAgain.sqrtPriceLimit0X96,
+        sqrtPriceLimit1X96: params.zapAgain.sqrtPriceLimit1X96,
+        iterations: params.zapAgain.iterations,
+        optimizer: address(0),
+        optimizeFixedParams: ''
+      })
     );
+    bytes memory variableParams = abi.encode(PoolSwapVariableParams({extraData: ''}));
+
+    PoolSwapResult memory swapResult =
+      abi.decode(_poolSwap(params.zapAgain.helper, fixedParams, variableParams), (PoolSwapResult));
 
     state.amount0 = swapResult.amount0;
     state.amount1 = swapResult.amount1;

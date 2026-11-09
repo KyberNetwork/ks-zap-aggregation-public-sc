@@ -60,13 +60,11 @@ contract ZapBalancerV2Settler is IZapBalancerV2Settler, ImmutableState {
       maxAmountsIn[i] = type(uint256).max;
     }
 
+    bytes memory userData =
+      abi.encode(IVault.JoinKind.EXACT_TOKENS_IN_FOR_BPT_OUT, currentBalances, params.minBptAmount);
+
     IVault.JoinPoolRequest memory joinRequest = IVault.JoinPoolRequest({
-      assets: poolTokens,
-      maxAmountsIn: maxAmountsIn,
-      userData: abi.encode(
-        IVault.JoinKind.EXACT_TOKENS_IN_FOR_BPT_OUT, currentBalances, params.minBptAmount
-      ),
-      fromInternalBalance: false
+      assets: poolTokens, maxAmountsIn: maxAmountsIn, userData: userData, fromInternalBalance: false
     });
 
     ZapInResult memory zapInResult;

@@ -24,10 +24,10 @@ abstract contract ZapAgainHelperCaller {
     internal
     returns (bytes memory result)
   {
+    bytes memory data = abi.encodeCall(IZapPoolSwapHelper.poolSwap, (fixedParams, variableParams));
+
     ZAP_AGAIN_HELPER_SLOT.asAddress().tstore(helper);
-    bytes memory returnData = Address.functionDelegateCall(
-      helper, abi.encodeCall(IZapPoolSwapHelper.poolSwap, (fixedParams, variableParams))
-    );
+    bytes memory returnData = Address.functionDelegateCall(helper, data);
     ZAP_AGAIN_HELPER_SLOT.asAddress().tstore(address(0));
 
     return abi.decode(returnData, (bytes));

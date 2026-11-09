@@ -2,9 +2,6 @@
 pragma solidity 0.8.30;
 
 import {IKSGenericRouter} from '../../interfaces/IKSGenericRouter.sol';
-import {
-  IZapAddLiquidityPreviewHelper
-} from '../../interfaces/settlers/IZapAddLiquidityPreviewHelper.sol';
 import {IZapUniswapV2Settler} from '../../interfaces/settlers/uniswap-v2/IZapUniswapV2Settler.sol';
 
 import {ImmutableState} from '../../base/ImmutableState.sol';
@@ -60,25 +57,14 @@ contract ZapUniswapV2Settler is IZapUniswapV2Settler, ImmutableState, ZapAgainHe
     zapInResult.originalAmount0 = state.amount0;
     zapInResult.originalAmount1 = state.amount1;
 
-    bytes memory fixedParams = abi.encode(
-      ZapInFixedParams({
-        pool: params.pool,
-        swapFee: params.swapFee,
-        protocolFee: params.protocolFee,
-        feeDenominator: params.feeDenominator,
-        readBalanceFlag: params.readBalanceFlag,
-        optimizer: address(0),
-        optimizeFixedParams: ''
-      })
-    );
-
-    _mint(params, state, zapInResult, fixedParams);
+    _mint(params, state, zapInResult);
 
     if (
-      state.amount0 >= params.minZapInAmounts.value0()
-        || state.amount1 >= params.minZapInAmounts.value1()
+      params.helper != address(0)
+        && (state.amount0 >= params.minZapInAmounts.value0()
+          || state.amount1 >= params.minZapInAmounts.value1())
     ) {
-      _zapAgain(params, state, zapInResult, fixedParams);
+      _zapAgain(params, state, zapInResult);
     }
 
     require(zapInResult.liquidity >= params.minLiquidity, ZapInUniswapV2InsufficientLiquidity());
@@ -99,37 +85,17 @@ contract ZapUniswapV2Settler is IZapUniswapV2Settler, ImmutableState, ZapAgainHe
     return result;
   }
 
-  /// @dev Mints the amounts the helper previews for the amounts in `state`
+  /// @dev Mints liquidity to the recipient with the amounts in `state` and records the mint in
+  /// `zapInResult`
   function _mint(
     ZapInParams calldata params,
     ZapInState memory state,
-    ZapInResult memory zapInResult,
-    bytes memory fixedParams
+    ZapInResult memory zapInResult
   ) internal {
-    PreviewAddLiquidityResult memory preview = abi.decode(
-      IZapAddLiquidityPreviewHelper(params.helper)
-        .previewAddLiquidity(
-          fixedParams,
-          abi.encode(PreviewZapInVariableParams({amount0: state.amount0, amount1: state.amount1}))
-        ),
-      (PreviewAddLiquidityResult)
+    (uint256 liquidity, uint256 addedAmount0, uint256 addedAmount1) = UniswapV2Library.previewMint(
+      IUniswapV2Pair(params.pool), params.protocolFee, params.swapFee, state.amount0, state.amount1
     );
 
-    _mintAmounts(
-      params, state, zapInResult, preview.liquidity, preview.addedAmount0, preview.addedAmount1
-    );
-  }
-
-  /// @dev Transfers the given amounts to the pair, mints the liquidity and records the addition in
-  /// `zapInResult`
-  function _mintAmounts(
-    ZapInParams calldata params,
-    ZapInState memory state,
-    ZapInResult memory zapInResult,
-    uint256 liquidity,
-    uint256 addedAmount0,
-    uint256 addedAmount1
-  ) internal {
     if (liquidity == 0) {
       return;
     }
@@ -157,17 +123,27 @@ contract ZapUniswapV2Settler is IZapUniswapV2Settler, ImmutableState, ZapAgainHe
   function _zapAgain(
     ZapInParams calldata params,
     ZapInState memory state,
-    ZapInResult memory zapInResult,
-    bytes memory fixedParams
+    ZapInResult memory zapInResult
   ) internal {
-    PoolSwapResult memory swapResult = abi.decode(
-      _poolSwap(params.helper, fixedParams, abi.encode(PoolSwapVariableParams({extraData: ''}))),
-      (PoolSwapResult)
+    bytes memory fixedParams = abi.encode(
+      ZapInFixedParams({
+        pool: params.pool,
+        swapFee: params.swapFee,
+        protocolFee: params.protocolFee,
+        feeDenominator: params.feeDenominator,
+        readBalanceFlag: params.readBalanceFlag,
+        optimizer: address(0),
+        optimizeFixedParams: ''
+      })
     );
+    bytes memory variableParams = abi.encode(PoolSwapVariableParams({extraData: ''}));
+
+    PoolSwapResult memory swapResult =
+      abi.decode(_poolSwap(params.helper, fixedParams, variableParams), (PoolSwapResult));
 
     state.amount0 = swapResult.amount0;
     state.amount1 = swapResult.amount1;
 
-    _mint(params, state, zapInResult, fixedParams);
+    _mint(params, state, zapInResult);
   }
 }

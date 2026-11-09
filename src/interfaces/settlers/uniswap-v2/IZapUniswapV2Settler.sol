@@ -19,8 +19,8 @@ interface IZapUniswapV2Settler is IZapSettler, IZapUniswapV2HelperTypes {
    * @param protocolFee The protocol fee
    * @param feeDenominator The fee denominator
    * @param readBalanceFlag Whether to read the token balances, used for fee-on-transfer or rebasing tokens
-   * @param helper The helper delegatecalled for the pool swap of the zap again and queried for the
-   * mint
+   * @param helper The helper delegatecalled for the pool swap of the zap again; the zero address
+   * disables the zap again
    * @param minZapInAmounts The remaining amounts of token0 and token1 from which the zap again runs;
    * it runs when either remaining amount is at least its minimum
    * @param minLiquidity The minimum liquidity to add

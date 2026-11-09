@@ -95,7 +95,8 @@ contract ZapCurveSettler is IZapCurveSettler, ImmutableState {
 
   /// @dev Returns the LP token of the pool, which is the pool itself when it has no `token` getter
   function _getLpToken(address pool) internal view returns (address) {
-    (bool success, bytes memory data) = pool.staticcall(abi.encodeCall(ICurveTricrypto.token, ()));
+    bytes memory callData = abi.encodeCall(ICurveTricrypto.token, ());
+    (bool success, bytes memory data) = pool.staticcall(callData);
 
     if (success && data.length == 32) {
       return abi.decode(data, (address));

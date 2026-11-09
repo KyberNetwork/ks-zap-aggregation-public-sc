@@ -149,20 +149,10 @@ contract ZapUniswapV4BaseSettler is IZapUniswapV4BaseSettler, ImmutableState, Za
     ZapInState memory state,
     ZapInResult memory zapInResult
   ) internal {
-    (uint160 sqrtPriceX96,,,) = state.poolManager.getSlot0(state.poolId);
-
-    uint128 liquidity = uint128(
-      LiquidityAmounts.getLiquidityForAmounts(
-        sqrtPriceX96, state.sqrtPriceLowerX96, state.sqrtPriceUpperX96, state.amount0, state.amount1
-      )
-    );
+    (uint128 liquidity, uint256 addedAmount0, uint256 addedAmount1) = _previewAddLiquidity(state);
     if (liquidity == 0) {
       return;
     }
-
-    (uint256 addedAmount0, uint256 addedAmount1) = _getAmountsForLiquidity(
-      sqrtPriceX96, state.sqrtPriceLowerX96, state.sqrtPriceUpperX96, liquidity
-    );
 
     bool currency0Native = params.poolKey.currency0.isNative();
     bool mint = state.tokenId == 0;
@@ -285,30 +275,27 @@ contract ZapUniswapV4BaseSettler is IZapUniswapV4BaseSettler, ImmutableState, Za
     ZapInState memory state,
     ZapInResult memory zapInResult
   ) internal {
-    PoolSwapResult memory swapResult = abi.decode(
-      _poolSwap(
-        params.zapAgain.helper,
-        abi.encode(
-          ZapInFixedParams({
-            posManager: params.posManager,
-            poolManager: params.poolManager,
-            poolKey: params.poolKey,
-            tickLower: params.tickLower,
-            tickUpper: params.tickUpper,
-            sqrtPriceLimit0X96: params.zapAgain.sqrtPriceLimit0X96,
-            sqrtPriceLimit1X96: params.zapAgain.sqrtPriceLimit1X96,
-            iterations: params.zapAgain.iterations,
-            swapHookData: params.zapAgain.swapHookData,
-            addLiquidityHookData: '',
-            optimizer: address(0),
-            optimizeFixedParams: '',
-            readBalanceFlag: params.readBalanceFlag
-          })
-        ),
-        abi.encode(PoolSwapVariableParams({extraData: ''}))
-      ),
-      (PoolSwapResult)
+    bytes memory fixedParams = abi.encode(
+      ZapInFixedParams({
+        posManager: params.posManager,
+        poolManager: params.poolManager,
+        poolKey: params.poolKey,
+        tickLower: params.tickLower,
+        tickUpper: params.tickUpper,
+        sqrtPriceLimit0X96: params.zapAgain.sqrtPriceLimit0X96,
+        sqrtPriceLimit1X96: params.zapAgain.sqrtPriceLimit1X96,
+        iterations: params.zapAgain.iterations,
+        swapHookData: params.zapAgain.swapHookData,
+        addLiquidityHookData: '',
+        optimizer: address(0),
+        optimizeFixedParams: '',
+        readBalanceFlag: params.readBalanceFlag
+      })
     );
+    bytes memory variableParams = abi.encode(PoolSwapVariableParams({extraData: ''}));
+
+    PoolSwapResult memory swapResult =
+      abi.decode(_poolSwap(params.zapAgain.helper, fixedParams, variableParams), (PoolSwapResult));
 
     state.amount0 = swapResult.amount0;
     state.amount1 = swapResult.amount1;
@@ -336,21 +323,40 @@ contract ZapUniswapV4BaseSettler is IZapUniswapV4BaseSettler, ImmutableState, Za
     }
   }
 
-  /// @dev The amounts of currency0 and currency1, rounded up, that `liquidity` requires in the
-  /// price range at `sqrtPriceX96`
-  function _getAmountsForLiquidity(
-    uint160 sqrtPriceX96,
-    uint160 sqrtPriceAX96,
-    uint160 sqrtPriceBX96,
-    uint128 liquidity
-  ) internal pure returns (uint256 amount0, uint256 amount1) {
-    if (sqrtPriceX96 <= sqrtPriceAX96) {
-      amount0 = SqrtPriceMath.getAmount0Delta(sqrtPriceAX96, sqrtPriceBX96, liquidity, true);
-    } else if (sqrtPriceX96 < sqrtPriceBX96) {
-      amount0 = SqrtPriceMath.getAmount0Delta(sqrtPriceX96, sqrtPriceBX96, liquidity, true);
-      amount1 = SqrtPriceMath.getAmount1Delta(sqrtPriceAX96, sqrtPriceX96, liquidity, true);
+  /**
+   * @dev Computes the liquidity that the amounts in `state` add to the price range at the current
+   * pool price, and the amounts of currency0 and currency1, rounded up, that the liquidity requires
+   * @param state The pool, the price range and the amounts to add
+   * @return liquidity The liquidity added
+   * @return addedAmount0 The amount of currency0 the liquidity requires
+   * @return addedAmount1 The amount of currency1 the liquidity requires
+   */
+  function _previewAddLiquidity(ZapInState memory state)
+    internal
+    view
+    returns (uint128 liquidity, uint256 addedAmount0, uint256 addedAmount1)
+  {
+    (uint160 sqrtPriceX96,,,) = state.poolManager.getSlot0(state.poolId);
+
+    liquidity = uint128(
+      LiquidityAmounts.getLiquidityForAmounts(
+        sqrtPriceX96, state.sqrtPriceLowerX96, state.sqrtPriceUpperX96, state.amount0, state.amount1
+      )
+    );
+
+    if (sqrtPriceX96 <= state.sqrtPriceLowerX96) {
+      addedAmount0 = SqrtPriceMath.getAmount0Delta(
+        state.sqrtPriceLowerX96, state.sqrtPriceUpperX96, liquidity, true
+      );
+    } else if (sqrtPriceX96 < state.sqrtPriceUpperX96) {
+      addedAmount0 =
+        SqrtPriceMath.getAmount0Delta(sqrtPriceX96, state.sqrtPriceUpperX96, liquidity, true);
+      addedAmount1 =
+        SqrtPriceMath.getAmount1Delta(state.sqrtPriceLowerX96, sqrtPriceX96, liquidity, true);
     } else {
-      amount1 = SqrtPriceMath.getAmount1Delta(sqrtPriceAX96, sqrtPriceBX96, liquidity, true);
+      addedAmount1 = SqrtPriceMath.getAmount1Delta(
+        state.sqrtPriceLowerX96, state.sqrtPriceUpperX96, liquidity, true
+      );
     }
   }
 }

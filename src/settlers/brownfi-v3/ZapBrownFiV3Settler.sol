@@ -2,14 +2,13 @@
 pragma solidity 0.8.30;
 
 import {IKSGenericRouter} from '../../interfaces/IKSGenericRouter.sol';
-import {
-  IZapAddLiquidityPreviewHelper
-} from '../../interfaces/settlers/IZapAddLiquidityPreviewHelper.sol';
 import {IZapBrownFiV3Settler} from '../../interfaces/settlers/brownfi-v3/IZapBrownFiV3Settler.sol';
 
 import {ImmutableState} from '../../base/ImmutableState.sol';
 import {ZapAgainHelperCaller} from '../../base/ZapAgainHelperCaller.sol';
 import {CommonLibrary} from '../../libraries/CommonLibrary.sol';
+import {BrownFiV3MintLibrary} from '../../libraries/brownfi-v3/BrownFiV3MintLibrary.sol';
+import {IBrownFiV3Factory} from '../../vendors/brownfi-v3/IBrownFiV3Factory.sol';
 import {IBrownFiV3Pair} from '../../vendors/brownfi-v3/IBrownFiV3Pair.sol';
 
 import {TokenHelper} from 'ks-common-sc/src/libraries/token/TokenHelper.sol';
@@ -59,16 +58,14 @@ contract ZapBrownFiV3Settler is IZapBrownFiV3Settler, ImmutableState, ZapAgainHe
     zapInResult.originalAmount0 = state.amount0;
     zapInResult.originalAmount1 = state.amount1;
 
-    bytes memory fixedParams =
-      abi.encode(ZapInFixedParams({pool: params.pool, iterations: params.iterations}));
-
-    _mint(params, state, zapInResult, fixedParams);
+    _mint(params, state, zapInResult);
 
     if (
-      state.amount0 >= params.minZapInAmounts.value0()
-        || state.amount1 >= params.minZapInAmounts.value1()
+      params.helper != address(0)
+        && (state.amount0 >= params.minZapInAmounts.value0()
+          || state.amount1 >= params.minZapInAmounts.value1())
     ) {
-      _zapAgain(params, state, zapInResult, fixedParams);
+      _zapAgain(params, state, zapInResult);
     }
 
     require(zapInResult.liquidity >= params.minLiquidity, ZapInBrownFiV3InsufficientLiquidity());
@@ -89,37 +86,15 @@ contract ZapBrownFiV3Settler is IZapBrownFiV3Settler, ImmutableState, ZapAgainHe
     return result;
   }
 
-  /// @dev Mints the amounts the helper previews for the amounts in `state`
+  /// @dev Mints liquidity to the recipient with the amounts in `state` and records the mint in
+  /// `zapInResult`
   function _mint(
     ZapInParams calldata params,
     ZapInState memory state,
-    ZapInResult memory zapInResult,
-    bytes memory fixedParams
+    ZapInResult memory zapInResult
   ) internal {
-    PreviewAddLiquidityResult memory preview = abi.decode(
-      IZapAddLiquidityPreviewHelper(params.helper)
-        .previewAddLiquidity(
-          fixedParams,
-          abi.encode(PreviewZapInVariableParams({amount0: state.amount0, amount1: state.amount1}))
-        ),
-      (PreviewAddLiquidityResult)
-    );
+    (uint256 liquidity, uint256 addedAmount0, uint256 addedAmount1) = _previewMint(params, state);
 
-    _mintAmounts(
-      params, state, zapInResult, preview.liquidity, preview.addedAmount0, preview.addedAmount1
-    );
-  }
-
-  /// @dev Transfers the given amounts to the pair, mints the liquidity and records the addition in
-  /// `zapInResult`
-  function _mintAmounts(
-    ZapInParams calldata params,
-    ZapInState memory state,
-    ZapInResult memory zapInResult,
-    uint256 liquidity,
-    uint256 addedAmount0,
-    uint256 addedAmount1
-  ) internal {
     if (liquidity == 0) {
       return;
     }
@@ -138,20 +113,51 @@ contract ZapBrownFiV3Settler is IZapBrownFiV3Settler, ImmutableState, ZapAgainHe
     }
   }
 
+  /// @dev Computes the liquidity minted by the amounts in `state` and the amounts of each token it
+  /// consumes, using the reserves, the total supply and the oracle prices of the pair
+  function _previewMint(ZapInParams calldata params, ZapInState memory state)
+    internal
+    view
+    returns (uint256 liquidity, uint256 addedAmount0, uint256 addedAmount1)
+  {
+    IBrownFiV3Pair pair = IBrownFiV3Pair(params.pool);
+
+    BrownFiV3MintLibrary.MintState memory mintState;
+    mintState.token0Decimals = pair.token0Decimals();
+    mintState.token1Decimals = pair.token1Decimals();
+    mintState.quoteTokenIndex = pair.quoteTokenIndex();
+    (uint256 reserve0, uint256 reserve1,) = pair.getReserves();
+    mintState.reserve0 = reserve0;
+    mintState.reserve1 = reserve1;
+    mintState.totalSupply = pair.totalSupply();
+
+    IBrownFiV3Factory factory = IBrownFiV3Factory(pair.factory());
+    uint256 minPriceAge = factory.minPriceAge();
+    mintState.price0 = factory.priceOf(state.token0, minPriceAge);
+    mintState.price1 = factory.priceOf(state.token1, minPriceAge);
+
+    mintState.amount0 = state.amount0;
+    mintState.amount1 = state.amount1;
+
+    return BrownFiV3MintLibrary.previewMint(mintState);
+  }
+
   /// @dev Swaps the remaining amounts through the helper and mints them into the pair
   function _zapAgain(
     ZapInParams calldata params,
     ZapInState memory state,
-    ZapInResult memory zapInResult,
-    bytes memory fixedParams
+    ZapInResult memory zapInResult
   ) internal {
-    PoolSwapResult memory swapResult = abi.decode(
-      _poolSwap(params.helper, fixedParams, ''), (PoolSwapResult)
+    bytes memory fixedParams = abi.encode(
+      ZapInFixedParams({pool: params.pool, iterations: params.iterations})
     );
+
+    PoolSwapResult memory swapResult =
+      abi.decode(_poolSwap(params.helper, fixedParams, ''), (PoolSwapResult));
 
     state.amount0 = swapResult.amount0;
     state.amount1 = swapResult.amount1;
 
-    _mint(params, state, zapInResult, fixedParams);
+    _mint(params, state, zapInResult);
   }
 }

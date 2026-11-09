@@ -2,15 +2,14 @@
 pragma solidity 0.8.30;
 
 import {IKSGenericRouter} from '../../interfaces/IKSGenericRouter.sol';
-import {
-  IZapAddLiquidityPreviewHelper
-} from '../../interfaces/settlers/IZapAddLiquidityPreviewHelper.sol';
 import {IZapSolidlyV2Settler} from '../../interfaces/settlers/solidly-v2/IZapSolidlyV2Settler.sol';
 
 import {ImmutableState} from '../../base/ImmutableState.sol';
 import {ZapAgainHelperCaller} from '../../base/ZapAgainHelperCaller.sol';
 import {CommonLibrary} from '../../libraries/CommonLibrary.sol';
 import {ISolidlyV2Pair} from '../../vendors/solidly-v2/ISolidlyV2Pair.sol';
+
+import {Math} from 'openzeppelin-contracts/contracts/utils/math/Math.sol';
 
 import {TokenHelper} from 'ks-common-sc/src/libraries/token/TokenHelper.sol';
 
@@ -21,6 +20,7 @@ import {TokenHelper} from 'ks-common-sc/src/libraries/token/TokenHelper.sol';
 /// contract serves every Solidly V2 fork through the helper of that fork.
 contract ZapSolidlyV2Settler is IZapSolidlyV2Settler, ImmutableState, ZapAgainHelperCaller {
   using TokenHelper for address;
+  using Math for uint256;
   using CommonLibrary for *;
 
   /// @dev Tokens and amounts of a zap in
@@ -60,16 +60,14 @@ contract ZapSolidlyV2Settler is IZapSolidlyV2Settler, ImmutableState, ZapAgainHe
     zapInResult.originalAmount0 = state.amount0;
     zapInResult.originalAmount1 = state.amount1;
 
-    bytes memory fixedParams =
-      abi.encode(ZapInFixedParams({pool: params.pool, readBalanceFlag: params.readBalanceFlag}));
-
-    _mint(params, state, zapInResult, fixedParams);
+    _mint(params, state, zapInResult);
 
     if (
-      state.amount0 >= params.minZapInAmounts.value0()
-        || state.amount1 >= params.minZapInAmounts.value1()
+      params.helper != address(0)
+        && (state.amount0 >= params.minZapInAmounts.value0()
+          || state.amount1 >= params.minZapInAmounts.value1())
     ) {
-      _zapAgain(params, state, zapInResult, fixedParams);
+      _zapAgain(params, state, zapInResult);
     }
 
     require(zapInResult.liquidity >= params.minLiquidity, ZapInSolidlyV2InsufficientLiquidity());
@@ -90,37 +88,15 @@ contract ZapSolidlyV2Settler is IZapSolidlyV2Settler, ImmutableState, ZapAgainHe
     return result;
   }
 
-  /// @dev Mints the amounts the helper previews for the amounts in `state`
+  /// @dev Mints liquidity to the recipient with the amounts in `state` and records the mint in
+  /// `zapInResult`
   function _mint(
     ZapInParams calldata params,
     ZapInState memory state,
-    ZapInResult memory zapInResult,
-    bytes memory fixedParams
+    ZapInResult memory zapInResult
   ) internal {
-    PreviewAddLiquidityResult memory preview = abi.decode(
-      IZapAddLiquidityPreviewHelper(params.helper)
-        .previewAddLiquidity(
-          fixedParams,
-          abi.encode(PreviewZapInVariableParams({amount0: state.amount0, amount1: state.amount1}))
-        ),
-      (PreviewAddLiquidityResult)
-    );
+    (uint256 liquidity, uint256 addedAmount0, uint256 addedAmount1) = _previewMint(params, state);
 
-    _mintAmounts(
-      params, state, zapInResult, preview.liquidity, preview.addedAmount0, preview.addedAmount1
-    );
-  }
-
-  /// @dev Transfers the given amounts to the pair, mints the liquidity and records the addition in
-  /// `zapInResult`
-  function _mintAmounts(
-    ZapInParams calldata params,
-    ZapInState memory state,
-    ZapInResult memory zapInResult,
-    uint256 liquidity,
-    uint256 addedAmount0,
-    uint256 addedAmount1
-  ) internal {
     if (liquidity == 0) {
       return;
     }
@@ -144,20 +120,39 @@ contract ZapSolidlyV2Settler is IZapSolidlyV2Settler, ImmutableState, ZapAgainHe
     }
   }
 
+  /// @dev Computes the liquidity minted by the amounts in `state` and the amounts of each token it
+  /// consumes, using the reserves and the total supply of the pair
+  function _previewMint(ZapInParams calldata params, ZapInState memory state)
+    internal
+    view
+    returns (uint256 liquidity, uint256 addedAmount0, uint256 addedAmount1)
+  {
+    (uint256 reserve0, uint256 reserve1,) = ISolidlyV2Pair(params.pool).getReserves();
+    uint256 totalSupply = ISolidlyV2Pair(params.pool).totalSupply();
+
+    liquidity =
+      Math.min(state.amount0 * totalSupply / reserve0, state.amount1 * totalSupply / reserve1);
+
+    addedAmount0 = (liquidity * reserve0).ceilDiv(totalSupply);
+    addedAmount1 = (liquidity * reserve1).ceilDiv(totalSupply);
+  }
+
   /// @dev Swaps the remaining amounts through the helper and mints them into the pair
   function _zapAgain(
     ZapInParams calldata params,
     ZapInState memory state,
-    ZapInResult memory zapInResult,
-    bytes memory fixedParams
+    ZapInResult memory zapInResult
   ) internal {
-    PoolSwapResult memory swapResult = abi.decode(
-      _poolSwap(params.helper, fixedParams, ''), (PoolSwapResult)
+    bytes memory fixedParams = abi.encode(
+      ZapInFixedParams({pool: params.pool, readBalanceFlag: params.readBalanceFlag})
     );
+
+    PoolSwapResult memory swapResult =
+      abi.decode(_poolSwap(params.helper, fixedParams, ''), (PoolSwapResult));
 
     state.amount0 = swapResult.amount0;
     state.amount1 = swapResult.amount1;
 
-    _mint(params, state, zapInResult, fixedParams);
+    _mint(params, state, zapInResult);
   }
 }
