@@ -4,6 +4,7 @@ pragma solidity 0.8.30;
 import {IKSZapExecutor} from './interfaces/IKSZapExecutor.sol';
 import {IKSZapRouterV3} from './interfaces/IKSZapRouterV3.sol';
 
+import {ValidateParams} from './types/ValidateParams.sol';
 import {ZapParams} from './types/ZapParams.sol';
 
 import {Lock} from 'ks-common-sc/src/base/Lock.sol';
@@ -79,10 +80,14 @@ contract KSZapRouterV3 is
     bytes calldata signature = data.decodeBytes(1);
     _verifySignature(zapParams, signature);
 
+    bytes[] memory beforeExecutionData = _beforeExecution(zapParams.validateParams);
+
     result = zapParams.executor
       .functionDelegateCall(abi.encodeCall(IKSZapExecutor.executeZap, (zapParams.executorData)));
 
-    emit Zap(zapParams.executor);
+    _afterExecution(zapParams.validateParams, beforeExecutionData);
+
+    emit Zap(zapParams.validateParams, zapParams.executor);
 
     if (zapParams.clientData.length > 0) {
       emit ClientData(zapParams.clientData);
@@ -100,5 +105,28 @@ contract KSZapRouterV3 is
   function _verifySignature(ZapParams calldata zapParams, bytes calldata signature) internal view {
     bytes32 hash = keccak256(abi.encode(block.chainid, address(this), msg.sender, zapParams));
     _checkRole(SIGNER_ROLE, ECDSA.recover(hash, signature));
+  }
+
+  /// @dev Returns the state before execution
+  function _beforeExecution(ValidateParams[] calldata validateParams)
+    internal
+    returns (bytes[] memory)
+  {
+    bytes[] memory beforeExecutionData = new bytes[](validateParams.length);
+    for (uint256 i = 0; i < validateParams.length; i++) {
+      beforeExecutionData[i] = validateParams[i].beforeExecution();
+    }
+
+    return beforeExecutionData;
+  }
+
+  /// @dev Validates the current state after execution against the before execution state
+  function _afterExecution(
+    ValidateParams[] calldata validateParams,
+    bytes[] memory beforeExecutionData
+  ) internal {
+    for (uint256 i = 0; i < validateParams.length; i++) {
+      validateParams[i].afterExecution(beforeExecutionData[i]);
+    }
   }
 }
