@@ -6,6 +6,7 @@ import {ZapAlgebraSettler} from '../../algebra/ZapAlgebraSettler.sol';
 import {
   IAlgebraIntegralV1_2NFT
 } from '../../../vendors/algebra-integral/v1.2/IAlgebraIntegralV1_2NFT.sol';
+import {CalldataDecoder} from 'ks-common-sc/src/libraries/calldata/CalldataDecoder.sol';
 
 /**
  * @title ZapAlgebraIntegralV1_2Settler
@@ -14,6 +15,8 @@ import {
  * @dev `ZapInParams.extraData` is the ABI-encoded deployer of the pool
  */
 contract ZapAlgebraIntegralV1_2Settler is ZapAlgebraSettler {
+  using CalldataDecoder for bytes;
+
   constructor(address _WETH) ZapAlgebraSettler(_WETH) {}
 
   /// @dev Mints a new position to the recipient with the given amounts for the pool of the
@@ -29,7 +32,7 @@ contract ZapAlgebraIntegralV1_2Settler is ZapAlgebraSettler {
     override
     returns (uint256 tokenId, uint256 liquidity, uint256 addedAmount0, uint256 addedAmount1)
   {
-    address deployer = abi.decode(params.extraData, (address));
+    address deployer = params.extraData.decodeAddress();
 
     return IAlgebraIntegralV1_2NFT(params.posManager)
       .mint(

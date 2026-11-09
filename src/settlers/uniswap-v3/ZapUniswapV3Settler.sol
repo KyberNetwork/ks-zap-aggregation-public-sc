@@ -10,6 +10,7 @@ import {CommonLibrary} from '../../libraries/CommonLibrary.sol';
 import {IUniswapV3NFT} from '../../vendors/uniswap-v3/IUniswapV3NFT.sol';
 import {IUniswapV3Pool} from '../../vendors/uniswap-v3/IUniswapV3Pool.sol';
 
+import {CalldataDecoder} from 'ks-common-sc/src/libraries/calldata/CalldataDecoder.sol';
 import {TokenHelper} from 'ks-common-sc/src/libraries/token/TokenHelper.sol';
 
 import {IERC721} from 'openzeppelin-contracts/contracts/token/ERC721/IERC721.sol';
@@ -24,6 +25,7 @@ import {TransientSlot} from 'openzeppelin-contracts/contracts/utils/TransientSlo
 /// @dev The contract holds no tokens between transactions. 1 wei of each token is retained. The
 /// swap callback is accepted only from the pool of the ongoing zap again swap.
 contract ZapUniswapV3Settler is IZapUniswapV3Settler, ImmutableState, ReentrancyGuardTransient {
+  using CalldataDecoder for bytes;
   using TokenHelper for address;
   using CommonLibrary for *;
   using TransientSlot for *;
@@ -129,12 +131,8 @@ contract ZapUniswapV3Settler is IZapUniswapV3Settler, ImmutableState, Reentrancy
   {
     require(msg.sender == SWAP_POOL_SLOT.asAddress().tload(), InvalidSwapCallbackCaller(msg.sender));
 
-    address token0;
-    address token1;
-    assembly ('memory-safe') {
-      token0 := calldataload(data.offset)
-      token1 := calldataload(add(data.offset, 0x20))
-    }
+    address token0 = data.decodeAddress(0);
+    address token1 = data.decodeAddress(1);
 
     if (amount0Delta > 0) {
       token0.safeTransfer(msg.sender, uint256(amount0Delta));
