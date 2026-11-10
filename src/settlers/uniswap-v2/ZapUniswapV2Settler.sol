@@ -7,8 +7,8 @@ import {IZapUniswapV2Settler} from '../../interfaces/settlers/uniswap-v2/IZapUni
 import {ImmutableState} from '../../base/ImmutableState.sol';
 import {ZapAgainHelperCaller} from '../../base/ZapAgainHelperCaller.sol';
 import {CommonLibrary} from '../../libraries/CommonLibrary.sol';
+import {UniswapV2MintLibrary} from '../../libraries/uniswap-v2/UniswapV2MintLibrary.sol';
 import {IUniswapV2Pair} from '../../vendors/uniswap-v2/IUniswapV2Pair.sol';
-import {UniswapV2Library} from '../../vendors/uniswap-v2/UniswapV2Library.sol';
 
 import {TokenHelper} from 'ks-common-sc/src/libraries/token/TokenHelper.sol';
 
@@ -92,7 +92,7 @@ contract ZapUniswapV2Settler is IZapUniswapV2Settler, ImmutableState, ZapAgainHe
     ZapInState memory state,
     ZapInResult memory zapInResult
   ) internal {
-    (uint256 liquidity, uint256 addedAmount0, uint256 addedAmount1) = UniswapV2Library.previewMint(
+    (uint256 liquidity, uint256 addedAmount0, uint256 addedAmount1) = UniswapV2MintLibrary.previewMint(
       IUniswapV2Pair(params.pool), params.protocolFee, params.swapFee, state.amount0, state.amount1
     );
 

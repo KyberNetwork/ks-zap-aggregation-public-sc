@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {IUniswapV2Pair} from './IUniswapV2Pair.sol';
+import {IUniswapV2Pair} from '../../vendors/uniswap-v2/IUniswapV2Pair.sol';
 
 import {Math} from 'openzeppelin-contracts/contracts/utils/math/Math.sol';
 
-/// @title UniswapV2Library
+/// @title UniswapV2MintLibrary
 /// @notice Computes the liquidity and the token amounts of a Uniswap V2 mint
-library UniswapV2Library {
+library UniswapV2MintLibrary {
   using Math for uint256;
 
   /**
