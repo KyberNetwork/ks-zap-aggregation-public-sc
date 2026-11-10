@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.30;
+pragma solidity 0.8.38;
 
 import {IKSZapExecutor} from '../../interfaces/IKSZapExecutor.sol';
 import {IZapCurveSettler} from '../../interfaces/settlers/curve/IZapCurveSettler.sol';
