@@ -26,7 +26,9 @@ contract ZapAlgebraSettler is ZapUniswapV3Settler {
   {
     bytes memory callData = abi.encodeWithSelector(IAlgebraV1_9BasePool.globalState.selector);
     bytes memory returnData = pool.functionStaticCall(callData);
-    sqrtPriceX96 = uint160(uint256(bytes32(returnData)));
+    assembly ('memory-safe') {
+      sqrtPriceX96 := mload(add(returnData, 0x20))
+    }
   }
 
   /// @dev Mints a new position to the recipient with the given amounts

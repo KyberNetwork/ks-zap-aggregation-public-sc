@@ -74,13 +74,9 @@ contract ZapUniswapV4BaseSettler is IZapUniswapV4BaseSettler, ImmutableState, Za
       }
     }
 
-    bytes memory ret = IPoolManager(params.poolManager).unlock(data);
+    bytes memory returnData = IPoolManager(params.poolManager).unlock(data);
 
-    ZapInResult memory zapInResult = abi.decode(ret, (ZapInResult));
-
-    require(
-      zapInResult.positionLiquidity >= params.minLiquidity, ZapInUniswapV4InsufficientLiquidity()
-    );
+    ZapInResult memory zapInResult = abi.decode(returnData, (ZapInResult));
 
     if (
       zapInResult.tokenId != 0
@@ -137,6 +133,10 @@ contract ZapUniswapV4BaseSettler is IZapUniswapV4BaseSettler, ImmutableState, Za
     ) {
       _zapAgain(params, state, zapInResult);
     }
+
+    require(
+      zapInResult.positionLiquidity >= params.minLiquidity, ZapInUniswapV4InsufficientLiquidity()
+    );
 
     zapInResult.tokenId = state.tokenId;
 

@@ -191,7 +191,9 @@ contract ZapUniswapV3Settler is IZapUniswapV3Settler, ImmutableState, ZapAgainHe
   function _getSqrtPriceX96(address pool) internal view virtual returns (uint160 sqrtPriceX96) {
     bytes memory callData = abi.encodeWithSelector(IUniswapV3Pool.slot0.selector);
     bytes memory returnData = pool.functionStaticCall(callData);
-    sqrtPriceX96 = uint160(uint256(bytes32(returnData)));
+    assembly ('memory-safe') {
+      sqrtPriceX96 := mload(add(returnData, 0x20))
+    }
   }
 
   /// @dev Mints a new position to the recipient with the given amounts

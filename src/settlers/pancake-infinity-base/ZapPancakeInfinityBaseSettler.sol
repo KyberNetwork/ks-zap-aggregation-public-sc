@@ -79,14 +79,9 @@ contract ZapPancakeInfinityBaseSettler is
       }
     }
 
-    bytes memory ret = IVault(params.vault).lock(data);
+    bytes memory returnData = IVault(params.vault).lock(data);
 
-    ZapInResult memory zapInResult = abi.decode(ret, (ZapInResult));
-
-    require(
-      zapInResult.positionLiquidity >= params.minLiquidity,
-      ZapInPancakeInfinityInsufficientLiquidity()
-    );
+    ZapInResult memory zapInResult = abi.decode(returnData, (ZapInResult));
 
     if (
       zapInResult.tokenId != 0
@@ -144,6 +139,11 @@ contract ZapPancakeInfinityBaseSettler is
     ) {
       _zapAgain(params, state, zapInResult);
     }
+
+    require(
+      zapInResult.positionLiquidity >= params.minLiquidity,
+      ZapInPancakeInfinityInsufficientLiquidity()
+    );
 
     zapInResult.tokenId = state.tokenId;
 

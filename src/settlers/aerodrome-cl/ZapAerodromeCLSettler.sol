@@ -21,7 +21,9 @@ contract ZapAerodromeCLSettler is ZapUniswapV3Settler {
   function _getSqrtPriceX96(address pool) internal view override returns (uint160 sqrtPriceX96) {
     bytes memory callData = abi.encodeWithSelector(IAerodromeCLPool.slot0.selector);
     bytes memory returnData = pool.functionStaticCall(callData);
-    sqrtPriceX96 = uint160(uint256(bytes32(returnData)));
+    assembly ('memory-safe') {
+      sqrtPriceX96 := mload(add(returnData, 0x20))
+    }
   }
 
   /// @dev Mints a new position to the recipient with the given amounts at the tick spacing of the
