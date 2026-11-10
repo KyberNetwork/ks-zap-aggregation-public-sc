@@ -36,5 +36,7 @@ abstract contract KSZapValidatorV3Base is IKSZapValidatorV3 {
     virtual
     returns (function(bytes calldata, bytes calldata, bytes calldata) internal);
 
+  /// The function intentionally performs no action.
+  // forge-lint: disable-next-line(empty-block)
   function _beforeExecutionDummy(bytes calldata) internal view returns (bytes memory) {}
 }

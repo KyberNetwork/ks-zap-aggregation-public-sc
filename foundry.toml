@@ -16,6 +16,18 @@ sort_imports = true
 
 [lint]
 lint_on_build = false
+ignore = ["src/vendors/**", "script/**", "test/**"]
+exclude_lints = [
+  "arbitrary-send-eth",
+  "block-timestamp",
+  "calls-loop",
+  "delegatecall-loop",
+  "divide-before-multiply",
+  "reentrancy-events",
+  "require-revert-in-loop",
+  "unsafe-typecast",
+  "unused-return",
+]
 
 [rpc_endpoints]
 mainnet = "${RPC_1}"

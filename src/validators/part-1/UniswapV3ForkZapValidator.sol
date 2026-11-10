@@ -60,7 +60,7 @@ contract UniswapV3ForkZapValidator is IUniswapV3ForkZapValidator {
     }
 
     uint256 tokenId = beforeExecutionInput.tokenId;
-    uint256 initialLiquidity;
+    uint256 initialLiquidity = 0;
 
     if (tokenId == 0) {
       uint256 totalSupply = _beforeExecutionOutput.decodeUint256();

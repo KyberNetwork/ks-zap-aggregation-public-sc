@@ -156,7 +156,7 @@ contract ZapUniswapV4BaseSettler is IZapUniswapV4BaseSettler, ImmutableState, Za
 
     bool currency0Native = params.poolKey.currency0.isNative();
     bool mint = state.tokenId == 0;
-    uint128 liquidityBefore;
+    uint128 liquidityBefore = 0;
 
     if (params.readBalanceFlag) {
       if (addedAmount0 > state.amount0) {

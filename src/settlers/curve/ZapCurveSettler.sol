@@ -44,7 +44,7 @@ contract ZapCurveSettler is IZapCurveSettler, ImmutableState {
     }
 
     address[] memory tokens = new address[](N_COINS);
-    bool hasWETH;
+    bool hasWETH = false;
     for (uint256 i = 0; i < N_COINS; i++) {
       tokens[i] = ICurveStableSwap(params.pool).coins(i);
       if (tokens[i] == address(WETH)) {

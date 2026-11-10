@@ -37,7 +37,7 @@ contract ZapBalancerV2Settler is IZapBalancerV2Settler, ImmutableState {
     (address[] memory poolTokens,,) = IVault(params.vault).getPoolTokens(params.poolId);
     uint256 length = poolTokens.length;
 
-    bool hasWETH;
+    bool hasWETH = false;
     for (uint256 i = 0; i < length; i++) {
       if (poolTokens[i] == address(WETH)) {
         hasWETH = true;

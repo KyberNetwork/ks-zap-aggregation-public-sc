@@ -41,7 +41,7 @@ contract ZapBalancerV3Settler is IZapBalancerV3Settler, ImmutableState {
 
     uint256 length = params.tokens.length;
 
-    bool hasWETH;
+    bool hasWETH = false;
     for (uint256 i = 0; i < length; i++) {
       if (params.tokens[i] == address(WETH)) {
         hasWETH = true;

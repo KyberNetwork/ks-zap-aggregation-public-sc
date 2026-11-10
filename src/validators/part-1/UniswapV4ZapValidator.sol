@@ -48,7 +48,7 @@ contract UniswapV4ZapValidator is IUniswapV4ZapValidator {
     }
 
     uint256 tokenId = beforeExecutionInput.tokenId;
-    uint256 initialLiquidity;
+    uint256 initialLiquidity = 0;
     if (tokenId == 0) {
       tokenId = _beforeExecutionOutput.decodeUint256();
     } else {

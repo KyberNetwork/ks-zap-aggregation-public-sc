@@ -162,7 +162,7 @@ contract ZapPancakeInfinityBaseSettler is
     }
 
     bool currency0Native = params.poolKey.currency0.isNative();
-    uint128 liquidityBefore;
+    uint128 liquidityBefore = 0;
 
     if (params.readBalanceFlag) {
       if (addedAmount0 > state.amount0) {
