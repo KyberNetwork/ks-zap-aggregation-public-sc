@@ -9,10 +9,13 @@ import {ZapAgainHelperCaller} from '../../base/ZapAgainHelperCaller.sol';
 import {CommonLibrary} from '../../libraries/CommonLibrary.sol';
 import {IUniswapV3NFT} from '../../vendors/uniswap-v3/IUniswapV3NFT.sol';
 import {IUniswapV3Pool} from '../../vendors/uniswap-v3/IUniswapV3Pool.sol';
+import {LiquidityAmounts} from '../../vendors/uniswap-v4/LiquidityAmounts.sol';
+import {TickMath} from '../../vendors/uniswap-v4/TickMath.sol';
 
 import {TokenHelper} from 'ks-common-sc/src/libraries/token/TokenHelper.sol';
 
 import {IERC721} from 'openzeppelin-contracts/contracts/token/ERC721/IERC721.sol';
+import {Address} from 'openzeppelin-contracts/contracts/utils/Address.sol';
 
 /// @title ZapUniswapV3Settler
 /// @notice Adds liquidity to a Uniswap V3 position with the token balances this contract holds, in
@@ -22,6 +25,7 @@ import {IERC721} from 'openzeppelin-contracts/contracts/token/ERC721/IERC721.sol
 contract ZapUniswapV3Settler is IZapUniswapV3Settler, ImmutableState, ZapAgainHelperCaller {
   using TokenHelper for address;
   using CommonLibrary for *;
+  using Address for address;
 
   /// @dev Tokens and amounts of a zap in
   struct ZapInState {
@@ -112,12 +116,25 @@ contract ZapUniswapV3Settler is IZapUniswapV3Settler, ImmutableState, ZapAgainHe
     return result;
   }
 
-  /// @dev Adds the amounts in `state` to the position and records the addition in `zapInResult`
+  /// @dev Adds the amounts in `state` to the position and records the addition in `zapInResult`.
+  /// Returns without calling the position manager when the amounts add no liquidity.
   function _addLiquidity(
     ZapInParams calldata params,
     ZapInState memory state,
     ZapInResult memory zapInResult
   ) internal {
+    if (
+      LiquidityAmounts.getLiquidityForAmounts(
+          _getSqrtPriceX96(params.pool),
+          TickMath.getSqrtPriceAtTick(params.tickLower),
+          TickMath.getSqrtPriceAtTick(params.tickUpper),
+          state.amount0,
+          state.amount1
+        ) == 0
+    ) {
+      return;
+    }
+
     uint256 liquidity;
     uint256 addedAmount0;
     uint256 addedAmount1;
@@ -168,6 +185,13 @@ contract ZapUniswapV3Settler is IZapUniswapV3Settler, ImmutableState, ZapAgainHe
     if (swapResult.positionLiquidity != 0) {
       _addLiquidity(params, state, zapInResult);
     }
+  }
+
+  /// @dev Reads the leading price word of the `slot0` getter of the pool
+  function _getSqrtPriceX96(address pool) internal view virtual returns (uint160 sqrtPriceX96) {
+    bytes memory callData = abi.encodeWithSelector(IUniswapV3Pool.slot0.selector);
+    bytes memory returnData = pool.functionStaticCall(callData);
+    sqrtPriceX96 = uint160(uint256(bytes32(returnData)));
   }
 
   /// @dev Mints a new position to the recipient with the given amounts
