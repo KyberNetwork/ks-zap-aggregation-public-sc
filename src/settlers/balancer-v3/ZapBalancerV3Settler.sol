@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
-import {IKSGenericRouter} from '../../interfaces/IKSGenericRouter.sol';
+import {IKSZapExecutor} from '../../interfaces/IKSZapExecutor.sol';
 import {
   IZapBalancerV3Settler
 } from '../../interfaces/settlers/balancer-v3/IZapBalancerV3Settler.sol';
@@ -15,8 +15,8 @@ import {IAllowanceTransfer} from 'ks-common-sc/src/interfaces/IAllowanceTransfer
 import {TokenHelper} from 'ks-common-sc/src/libraries/token/TokenHelper.sol';
 
 /// @title ZapBalancerV3Settler
-/// @notice Adds liquidity to a Balancer V3 pool with the token balances this contract holds, in an
-/// owner call of an allowance hub fulfillment
+/// @notice Adds liquidity to a Balancer V3 pool with the token balances this contract holds, when
+/// KSZapRouterV3 delegatecalls it in an owner call of an allowance hub fulfillment
 /// @dev The contract holds no tokens between transactions. 1 wei of each token is retained.
 contract ZapBalancerV3Settler is IZapBalancerV3Settler, ImmutableState {
   using TokenHelper for address;
@@ -32,8 +32,8 @@ contract ZapBalancerV3Settler is IZapBalancerV3Settler, ImmutableState {
   /// @dev Allows the contract to receive native tokens
   receive() external payable {}
 
-  /// @inheritdoc IKSGenericRouter
-  function ksExecute(bytes calldata data) external payable returns (bytes memory) {
+  /// @inheritdoc IKSZapExecutor
+  function executeZap(bytes calldata data) external payable returns (bytes memory) {
     ZapInParams calldata params;
     assembly ('memory-safe') {
       params := add(data.offset, calldataload(data.offset))

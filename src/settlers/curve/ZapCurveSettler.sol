@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
-import {IKSGenericRouter} from '../../interfaces/IKSGenericRouter.sol';
+import {IKSZapExecutor} from '../../interfaces/IKSZapExecutor.sol';
 import {IZapCurveSettler} from '../../interfaces/settlers/curve/IZapCurveSettler.sol';
 
 import {ImmutableState} from '../../base/ImmutableState.sol';
@@ -13,8 +13,8 @@ import {ICurveTwocrypto} from '../../vendors/curve/ICurveTwocrypto.sol';
 import {TokenHelper} from 'ks-common-sc/src/libraries/token/TokenHelper.sol';
 
 /// @title ZapCurveSettler
-/// @notice Adds liquidity to a Curve pool with the token balances this contract holds, in an owner
-/// call of an allowance hub fulfillment
+/// @notice Adds liquidity to a Curve pool with the token balances this contract holds, when
+/// KSZapRouterV3 delegatecalls it in an owner call of an allowance hub fulfillment
 /// @dev The contract holds no tokens between transactions. 1 wei of each token is retained.
 contract ZapCurveSettler is IZapCurveSettler, ImmutableState {
   using TokenHelper for address;
@@ -25,8 +25,8 @@ contract ZapCurveSettler is IZapCurveSettler, ImmutableState {
   /// @dev Allows the contract to receive native tokens
   receive() external payable {}
 
-  /// @inheritdoc IKSGenericRouter
-  function ksExecute(bytes calldata data) external payable returns (bytes memory) {
+  /// @inheritdoc IKSZapExecutor
+  function executeZap(bytes calldata data) external payable returns (bytes memory) {
     ZapInParams calldata params;
     assembly ('memory-safe') {
       params := data.offset

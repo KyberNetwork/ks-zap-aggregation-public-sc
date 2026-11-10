@@ -11,7 +11,7 @@ import {Address} from 'openzeppelin-contracts/contracts/utils/Address.sol';
 
 /// @title ZapAerodromeCLSettler
 /// @notice Adds liquidity to an Aerodrome CL position with the token balances this contract holds,
-/// in an owner call of an allowance hub fulfillment
+/// when KSZapRouterV3 delegatecalls it in an owner call of an allowance hub fulfillment
 contract ZapAerodromeCLSettler is ZapUniswapV3Settler {
   using Address for address;
 

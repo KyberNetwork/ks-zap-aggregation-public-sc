@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
-import {IKSGenericRouter} from '../../interfaces/IKSGenericRouter.sol';
+import {IKSZapExecutor} from '../../interfaces/IKSZapExecutor.sol';
 import {
   IZapPancakeInfinityBaseSettler
 } from '../../interfaces/settlers/pancake-infinity-base/IZapPancakeInfinityBaseSettler.sol';
@@ -26,7 +26,7 @@ import {IERC721} from 'openzeppelin-contracts/contracts/token/ERC721/IERC721.sol
 
 /// @title ZapPancakeInfinityBaseSettler
 /// @notice Adds liquidity to a Pancake Infinity CL position with the token balances this contract
-/// holds, in an owner call of an allowance hub fulfillment
+/// holds, when KSZapRouterV3 delegatecalls it in an owner call of an allowance hub fulfillment
 /// @dev The contract holds no tokens between transactions. 1 wei of each token is retained. A new
 /// position is minted to this contract and transferred to the recipient after the lock.
 contract ZapPancakeInfinityBaseSettler is
@@ -54,8 +54,8 @@ contract ZapPancakeInfinityBaseSettler is
   /// @dev Allows the contract to receive native tokens
   receive() external payable {}
 
-  /// @inheritdoc IKSGenericRouter
-  function ksExecute(bytes calldata data) external payable returns (bytes memory) {
+  /// @inheritdoc IKSZapExecutor
+  function executeZap(bytes calldata data) external payable returns (bytes memory) {
     ZapInParams calldata params;
     assembly ('memory-safe') {
       params := add(data.offset, calldataload(data.offset))

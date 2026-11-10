@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
-import {IKSGenericRouter} from '../../interfaces/IKSGenericRouter.sol';
+import {IKSZapExecutor} from '../../interfaces/IKSZapExecutor.sol';
 import {IZapArrakisV2Settler} from '../../interfaces/settlers/arrakis-v2/IZapArrakisV2Settler.sol';
 
 import {ImmutableState} from '../../base/ImmutableState.sol';
@@ -13,8 +13,8 @@ import {IUniswapV3Pool} from '../../vendors/uniswap-v3/IUniswapV3Pool.sol';
 import {TokenHelper} from 'ks-common-sc/src/libraries/token/TokenHelper.sol';
 
 /// @title ZapArrakisV2Settler
-/// @notice Deposits into an Arrakis V2 vault with the token balances this contract holds, in an
-/// owner call of an allowance hub fulfillment
+/// @notice Deposits into an Arrakis V2 vault with the token balances this contract holds, when
+/// KSZapRouterV3 delegatecalls it in an owner call of an allowance hub fulfillment
 /// @dev The contract holds no tokens between transactions. 1 wei of each token is retained. The
 /// swap callbacks of the zap again are forwarded to the helper.
 contract ZapArrakisV2Settler is IZapArrakisV2Settler, ImmutableState, ZapAgainHelperCaller {
@@ -39,8 +39,8 @@ contract ZapArrakisV2Settler is IZapArrakisV2Settler, ImmutableState, ZapAgainHe
     _forwardUniswapV3SwapCallback();
   }
 
-  /// @inheritdoc IKSGenericRouter
-  function ksExecute(bytes calldata data) external payable returns (bytes memory) {
+  /// @inheritdoc IKSZapExecutor
+  function executeZap(bytes calldata data) external payable returns (bytes memory) {
     ZapInParams calldata params;
     assembly ('memory-safe') {
       params := data.offset

@@ -9,7 +9,7 @@ import {CommonLibrary} from '../../libraries/CommonLibrary.sol';
 
 /// @title ZapGammaAlgebraIntegralSettler
 /// @notice Deposits into a Gamma vault on Algebra Integral with the token balances this contract
-/// holds, in an owner call of an allowance hub fulfillment
+/// holds, when KSZapRouterV3 delegatecalls it in an owner call of an allowance hub fulfillment
 /// @dev The contract holds no tokens between transactions. 1 wei of each token is retained. The
 /// swap callbacks of the zap again are forwarded to the helper.
 contract ZapGammaAlgebraIntegralSettler is ZapGammaSettler {

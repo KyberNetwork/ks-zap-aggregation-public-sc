@@ -9,8 +9,8 @@ import {CommonLibrary} from '../../libraries/CommonLibrary.sol';
 
 /// @title ZapGammaSettler
 /// @notice Deposits into a Gamma vault on Uniswap V3, Algebra Base, Algebra Directional Fees or
-/// Ramses V2 with the token balances this contract holds, in an owner call of an allowance hub
-/// fulfillment
+/// Ramses V2 with the token balances this contract holds, when KSZapRouterV3 delegatecalls it in an
+/// owner call of an allowance hub fulfillment
 /// @dev The contract holds no tokens between transactions. 1 wei of each token is retained. The
 /// swap callbacks of the zap again are forwarded to the helper.
 contract ZapGammaSettler is ZapArrakisV2Settler {

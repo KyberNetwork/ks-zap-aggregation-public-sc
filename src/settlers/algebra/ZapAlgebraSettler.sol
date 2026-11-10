@@ -10,7 +10,8 @@ import {Address} from 'openzeppelin-contracts/contracts/utils/Address.sol';
 
 /// @title ZapAlgebraSettler
 /// @notice Adds liquidity to an Algebra V1.9 or Algebra Integral V1.0 position with the token
-/// balances this contract holds, in an owner call of an allowance hub fulfillment
+/// balances this contract holds, when KSZapRouterV3 delegatecalls it in an owner call of an
+/// allowance hub fulfillment
 contract ZapAlgebraSettler is ZapUniswapV3Settler {
   using Address for address;
 

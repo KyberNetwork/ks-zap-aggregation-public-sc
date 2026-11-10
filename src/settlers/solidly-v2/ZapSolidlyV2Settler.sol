@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
-import {IKSGenericRouter} from '../../interfaces/IKSGenericRouter.sol';
+import {IKSZapExecutor} from '../../interfaces/IKSZapExecutor.sol';
 import {IZapSolidlyV2Settler} from '../../interfaces/settlers/solidly-v2/IZapSolidlyV2Settler.sol';
 
 import {ImmutableState} from '../../base/ImmutableState.sol';
@@ -14,8 +14,8 @@ import {Math} from 'openzeppelin-contracts/contracts/utils/math/Math.sol';
 import {TokenHelper} from 'ks-common-sc/src/libraries/token/TokenHelper.sol';
 
 /// @title ZapSolidlyV2Settler
-/// @notice Adds liquidity to a Solidly V2 pair with the token balances this contract holds, in an
-/// owner call of an allowance hub fulfillment
+/// @notice Adds liquidity to a Solidly V2 pair with the token balances this contract holds, when
+/// KSZapRouterV3 delegatecalls it in an owner call of an allowance hub fulfillment
 /// @dev The contract holds no tokens between transactions. 1 wei of each token is retained. The
 /// contract serves every Solidly V2 fork through the helper of that fork.
 contract ZapSolidlyV2Settler is IZapSolidlyV2Settler, ImmutableState, ZapAgainHelperCaller {
@@ -36,8 +36,8 @@ contract ZapSolidlyV2Settler is IZapSolidlyV2Settler, ImmutableState, ZapAgainHe
   /// @dev Allows the contract to receive native tokens
   receive() external payable {}
 
-  /// @inheritdoc IKSGenericRouter
-  function ksExecute(bytes calldata data) external payable returns (bytes memory) {
+  /// @inheritdoc IKSZapExecutor
+  function executeZap(bytes calldata data) external payable returns (bytes memory) {
     ZapInParams calldata params;
     assembly ('memory-safe') {
       params := data.offset

@@ -6,8 +6,8 @@ import {ZapArrakisV2Settler} from '../arrakis-v2/ZapArrakisV2Settler.sol';
 import {ISteerVault} from '../../vendors/steer/ISteerVault.sol';
 
 /// @title ZapSteerSettler
-/// @notice Deposits into a Steer vault with the token balances this contract holds, in an owner
-/// call of an allowance hub fulfillment
+/// @notice Deposits into a Steer vault with the token balances this contract holds, when
+/// KSZapRouterV3 delegatecalls it in an owner call of an allowance hub fulfillment
 /// @dev The contract holds no tokens between transactions. 1 wei of each token is retained. The
 /// swap callbacks of the zap again are forwarded to the helper.
 contract ZapSteerSettler is ZapArrakisV2Settler {

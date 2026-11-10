@@ -11,7 +11,8 @@ import {CalldataDecoder} from 'ks-common-sc/src/libraries/calldata/CalldataDecod
 /**
  * @title ZapAlgebraIntegralV1_2Settler
  * @notice Adds liquidity to an Algebra Integral V1.2 position with the token balances this
- * contract holds, in an owner call of an allowance hub fulfillment
+ * contract holds, when KSZapRouterV3 delegatecalls it in an owner call of an allowance hub
+ * fulfillment
  * @dev `ZapInParams.extraData` is the ABI-encoded deployer of the pool
  */
 contract ZapAlgebraIntegralV1_2Settler is ZapAlgebraSettler {

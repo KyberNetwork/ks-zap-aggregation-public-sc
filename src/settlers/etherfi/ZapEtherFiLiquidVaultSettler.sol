@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
-import {IKSGenericRouter} from '../../interfaces/IKSGenericRouter.sol';
+import {IKSZapExecutor} from '../../interfaces/IKSZapExecutor.sol';
 import {
   IZapEtherFiLiquidVaultSettler
 } from '../../interfaces/settlers/etherfi/IZapEtherFiLiquidVaultSettler.sol';
@@ -13,8 +13,8 @@ import {ILiquidRefer} from '../../vendors/etherfi/ILiquidRefer.sol';
 import {TokenHelper} from 'ks-common-sc/src/libraries/token/TokenHelper.sol';
 
 /// @title ZapEtherFiLiquidVaultSettler
-/// @notice Deposits the token balance this contract holds into an ether.fi Liquid vault, in an
-/// owner call of an allowance hub fulfillment
+/// @notice Deposits the token balance this contract holds into an ether.fi Liquid vault, when
+/// KSZapRouterV3 delegatecalls it in an owner call of an allowance hub fulfillment
 /// @dev The contract holds no tokens between transactions. 1 wei of the deposited token is
 /// retained.
 contract ZapEtherFiLiquidVaultSettler is IZapEtherFiLiquidVaultSettler, ImmutableState {
@@ -26,8 +26,8 @@ contract ZapEtherFiLiquidVaultSettler is IZapEtherFiLiquidVaultSettler, Immutabl
   /// @dev Allows the contract to receive native tokens
   receive() external payable {}
 
-  /// @inheritdoc IKSGenericRouter
-  function ksExecute(bytes calldata data) external payable returns (bytes memory) {
+  /// @inheritdoc IKSZapExecutor
+  function executeZap(bytes calldata data) external payable returns (bytes memory) {
     ZapInParams calldata params;
     assembly ('memory-safe') {
       params := data.offset

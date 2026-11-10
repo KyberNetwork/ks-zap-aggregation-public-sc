@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
-import {IKSGenericRouter} from '../../interfaces/IKSGenericRouter.sol';
+import {IKSZapExecutor} from '../../interfaces/IKSZapExecutor.sol';
 import {IZapBrownFiV3Settler} from '../../interfaces/settlers/brownfi-v3/IZapBrownFiV3Settler.sol';
 
 import {ImmutableState} from '../../base/ImmutableState.sol';
@@ -14,8 +14,8 @@ import {IBrownFiV3Pair} from '../../vendors/brownfi-v3/IBrownFiV3Pair.sol';
 import {TokenHelper} from 'ks-common-sc/src/libraries/token/TokenHelper.sol';
 
 /// @title ZapBrownFiV3Settler
-/// @notice Adds liquidity to a BrownFi V3 pair with the token balances this contract holds, in an
-/// owner call of an allowance hub fulfillment
+/// @notice Adds liquidity to a BrownFi V3 pair with the token balances this contract holds, when
+/// KSZapRouterV3 delegatecalls it in an owner call of an allowance hub fulfillment
 /// @dev The contract holds no tokens between transactions. 1 wei of each token is retained.
 contract ZapBrownFiV3Settler is IZapBrownFiV3Settler, ImmutableState, ZapAgainHelperCaller {
   using TokenHelper for address;
@@ -34,8 +34,8 @@ contract ZapBrownFiV3Settler is IZapBrownFiV3Settler, ImmutableState, ZapAgainHe
   /// @dev Allows the contract to receive native tokens
   receive() external payable {}
 
-  /// @inheritdoc IKSGenericRouter
-  function ksExecute(bytes calldata data) external payable returns (bytes memory) {
+  /// @inheritdoc IKSZapExecutor
+  function executeZap(bytes calldata data) external payable returns (bytes memory) {
     ZapInParams calldata params;
     assembly ('memory-safe') {
       params := data.offset
