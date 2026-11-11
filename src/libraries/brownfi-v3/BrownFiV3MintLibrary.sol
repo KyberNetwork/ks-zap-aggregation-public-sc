@@ -15,6 +15,7 @@ library BrownFiV3MintLibrary {
     uint8 quoteTokenIndex;
     uint256 price0;
     uint256 price1;
+    uint256 ammPrice;
     uint256 reserve0;
     uint256 reserve1;
     uint256 totalSupply;
@@ -71,7 +72,7 @@ library BrownFiV3MintLibrary {
     uint256 v1 = baseReserve * pythBase + quoteReserve * pythQuote;
     uint256 lp1 = Math.mulDiv(state.totalSupply, n1, v1);
 
-    uint256 ammPrice = getAmmPrice(state);
+    uint256 ammPrice = state.ammPrice;
     liquidity = lp1;
     if (ammPrice > 0) {
       uint256 n2 = Math.min(baseIn * ammPrice, quoteIn * Q64) * 2;
@@ -94,29 +95,6 @@ library BrownFiV3MintLibrary {
       addedAmount0 = from18RoundUp(state.token0Decimals, addedQuote);
       addedAmount1 = from18RoundUp(state.token1Decimals, addedBase);
     }
-  }
-
-  /// @dev Returns the pool price of the base token in the quote token as a Q64 value, or zero when
-  /// the base reserve is zero
-  function getAmmPrice(MintState memory state) internal pure returns (uint256) {
-    (uint256 baseReserve, uint256 quoteReserve) = baseQuoteReserves18(state);
-    if (baseReserve == 0) {
-      return 0;
-    }
-    return Math.mulDiv(quoteReserve, Q64, baseReserve);
-  }
-
-  /// @dev Returns the base and quote reserves scaled to 18 decimals
-  function baseQuoteReserves18(MintState memory state)
-    internal
-    pure
-    returns (uint256 baseReserve, uint256 quoteReserve)
-  {
-    if (token0IsBase(state)) {
-      return
-        (to18(state.token0Decimals, state.reserve0), to18(state.token1Decimals, state.reserve1));
-    }
-    return (to18(state.token1Decimals, state.reserve1), to18(state.token0Decimals, state.reserve0));
   }
 
   /// @dev Returns whether token0 is the base token

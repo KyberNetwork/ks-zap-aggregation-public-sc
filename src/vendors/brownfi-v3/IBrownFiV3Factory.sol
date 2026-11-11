@@ -6,6 +6,7 @@ interface IBrownFiV3Factory {
   function feeTo() external view returns (address);
   function minPriceAge() external view returns (uint256);
   function priceOf(address token, uint256 priceAge) external view returns (uint256);
+  function getAmmPrice(address pair) external view returns (uint256);
 
   function getSwapPrices(
     address pair,

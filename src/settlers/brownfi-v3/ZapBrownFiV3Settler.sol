@@ -135,6 +135,7 @@ contract ZapBrownFiV3Settler is IZapBrownFiV3Settler, ImmutableState, ZapAgainHe
     uint256 minPriceAge = factory.minPriceAge();
     mintState.price0 = factory.priceOf(state.token0, minPriceAge);
     mintState.price1 = factory.priceOf(state.token1, minPriceAge);
+    mintState.ammPrice = factory.getAmmPrice(params.pool);
 
     mintState.amount0 = state.amount0;
     mintState.amount1 = state.amount1;
