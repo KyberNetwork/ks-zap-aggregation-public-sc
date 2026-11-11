@@ -17,7 +17,8 @@ import {TokenHelper} from 'ks-common-sc/src/libraries/token/TokenHelper.sol';
 /// @notice Adds liquidity to a Solidly V2 pair with the token balances this contract holds, when
 /// KSZapRouterV3 delegatecalls it in an owner call of an allowance hub fulfillment
 /// @dev The contract holds no tokens between transactions. 1 wei of each token is retained. The
-/// contract serves every Solidly V2 fork through the helper of that fork.
+/// contract serves every Solidly V2 fork whose pair mints no protocol fee liquidity, through the
+/// helper of that fork.
 contract ZapSolidlyV2Settler is IZapSolidlyV2Settler, ImmutableState, ZapAgainHelperCaller {
   using TokenHelper for address;
   using Math for uint256;
@@ -121,20 +122,31 @@ contract ZapSolidlyV2Settler is IZapSolidlyV2Settler, ImmutableState, ZapAgainHe
   }
 
   /// @dev Computes the liquidity minted by the amounts in `state` and the amounts of each token it
-  /// consumes, using the reserves and the total supply of the pair
+  /// consumes, using the reserves of the pair and the total supply from `_actualTotalSupply`
   function _previewMint(ZapInParams calldata params, ZapInState memory state)
     internal
     view
     returns (uint256 liquidity, uint256 addedAmount0, uint256 addedAmount1)
   {
     (uint256 reserve0, uint256 reserve1,) = ISolidlyV2Pair(params.pool).getReserves();
-    uint256 totalSupply = ISolidlyV2Pair(params.pool).totalSupply();
+    uint256 totalSupply = _actualTotalSupply(params.pool, reserve0, reserve1);
 
     liquidity =
       Math.min(state.amount0 * totalSupply / reserve0, state.amount1 * totalSupply / reserve1);
 
     addedAmount0 = (liquidity * reserve0).ceilDiv(totalSupply);
     addedAmount1 = (liquidity * reserve1).ceilDiv(totalSupply);
+  }
+
+  /// @dev Returns the total supply of the pair at the start of its `mint`, which is `totalSupply()`
+  /// for a pair that mints no protocol fee liquidity
+  function _actualTotalSupply(address pool, uint256, uint256)
+    internal
+    view
+    virtual
+    returns (uint256)
+  {
+    return ISolidlyV2Pair(pool).totalSupply();
   }
 
   /// @dev Swaps the remaining amounts through the helper and mints them into the pair
