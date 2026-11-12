@@ -182,6 +182,12 @@ contract ZapPancakeInfinityBaseSettler is
       }
     }
 
+    /// The position manager credits the accrued fees of an increase against the principal. The
+    /// native amount is settled in full for it, and CLOSE_CURRENCY returns the credited fees
+    if (currency0Native && !params.readBalanceFlag) {
+      _settleFor(state.vault, params.poolKey.currency0, params.posManager, addedAmount0);
+    }
+
     bytes memory actions = new bytes(3);
     bytes[] memory actionParams = new bytes[](3);
 
@@ -236,12 +242,7 @@ contract ZapPancakeInfinityBaseSettler is
     actions[2] = bytes1(uint8(Actions.CLOSE_CURRENCY));
     actionParams[2] = abi.encode(params.poolKey.currency1);
 
-    ICLPositionManager(params.posManager)
-    .modifyLiquiditiesWithoutLock{
-      value: currency0Native && !params.readBalanceFlag ? addedAmount0 : 0
-    }(
-      actions, actionParams
-    );
+    ICLPositionManager(params.posManager).modifyLiquiditiesWithoutLock(actions, actionParams);
 
     if (params.readBalanceFlag) {
       unchecked {

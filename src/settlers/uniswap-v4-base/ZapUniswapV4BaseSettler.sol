@@ -176,6 +176,12 @@ contract ZapUniswapV4BaseSettler is IZapUniswapV4BaseSettler, ImmutableState, Za
       }
     }
 
+    /// The position manager credits the accrued fees of an increase against the principal. The
+    /// native amount is settled in full for it, and CLOSE_CURRENCY returns the credited fees
+    if (currency0Native && !params.readBalanceFlag) {
+      _settleFor(state.poolManager, params.poolKey.currency0, params.posManager, addedAmount0);
+    }
+
     if (mint) {
       state.tokenId = IPositionManager(params.posManager).nextTokenId();
     }
@@ -232,12 +238,7 @@ contract ZapUniswapV4BaseSettler is IZapUniswapV4BaseSettler, ImmutableState, Za
     actions[2] = bytes1(uint8(Actions.CLOSE_CURRENCY));
     actionParams[2] = abi.encode(params.poolKey.currency1);
 
-    IPositionManager(params.posManager)
-    .modifyLiquiditiesWithoutUnlock{
-      value: currency0Native && !params.readBalanceFlag ? addedAmount0 : 0
-    }(
-      actions, actionParams
-    );
+    IPositionManager(params.posManager).modifyLiquiditiesWithoutUnlock(actions, actionParams);
 
     if (params.readBalanceFlag) {
       unchecked {
