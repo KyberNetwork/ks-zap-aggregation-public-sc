@@ -33,13 +33,7 @@ contract ZapAlgebraSettler is ZapUniswapV3Settler {
   }
 
   /// @dev Mints a new position to the recipient with the given amounts
-  function _mint(
-    ZapInParams calldata params,
-    address token0,
-    address token1,
-    uint256 amount0,
-    uint256 amount1
-  )
+  function _mint(ZapInParams calldata params, ZapInState memory state)
     internal
     virtual
     override
@@ -48,12 +42,12 @@ contract ZapAlgebraSettler is ZapUniswapV3Settler {
     return IAlgebraV1_9NFT(params.posManager)
       .mint(
         IAlgebraV1_9NFT.MintParams({
-          token0: token0,
-          token1: token1,
+          token0: state.token0,
+          token1: state.token1,
           tickLower: params.tickLower,
           tickUpper: params.tickUpper,
-          amount0Desired: amount0,
-          amount1Desired: amount1,
+          amount0Desired: state.amount0,
+          amount1Desired: state.amount1,
           amount0Min: 0,
           amount1Min: 0,
           recipient: params.recipient,

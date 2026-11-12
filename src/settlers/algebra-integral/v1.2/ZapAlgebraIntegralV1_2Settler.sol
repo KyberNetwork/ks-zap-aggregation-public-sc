@@ -22,13 +22,7 @@ contract ZapAlgebraIntegralV1_2Settler is ZapAlgebraSettler {
 
   /// @dev Mints a new position to the recipient with the given amounts for the pool of the
   /// deployer in `params.extraData`
-  function _mint(
-    ZapInParams calldata params,
-    address token0,
-    address token1,
-    uint256 amount0,
-    uint256 amount1
-  )
+  function _mint(ZapInParams calldata params, ZapInState memory state)
     internal
     override
     returns (uint256 tokenId, uint256 liquidity, uint256 addedAmount0, uint256 addedAmount1)
@@ -38,13 +32,13 @@ contract ZapAlgebraIntegralV1_2Settler is ZapAlgebraSettler {
     return IAlgebraIntegralV1_2NFT(params.posManager)
       .mint(
         IAlgebraIntegralV1_2NFT.MintParams({
-          token0: token0,
-          token1: token1,
+          token0: state.token0,
+          token1: state.token1,
           deployer: deployer,
           tickLower: params.tickLower,
           tickUpper: params.tickUpper,
-          amount0Desired: amount0,
-          amount1Desired: amount1,
+          amount0Desired: state.amount0,
+          amount1Desired: state.amount1,
           amount0Min: 0,
           amount1Min: 0,
           recipient: params.recipient,

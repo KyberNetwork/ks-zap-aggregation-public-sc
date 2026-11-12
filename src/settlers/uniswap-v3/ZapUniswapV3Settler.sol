@@ -139,11 +139,9 @@ contract ZapUniswapV3Settler is IZapUniswapV3Settler, ImmutableState, ZapAgainHe
     uint256 addedAmount0;
     uint256 addedAmount1;
     if (state.tokenId == 0) {
-      (state.tokenId, liquidity, addedAmount0, addedAmount1) =
-        _mint(params, state.token0, state.token1, state.amount0, state.amount1);
+      (state.tokenId, liquidity, addedAmount0, addedAmount1) = _mint(params, state);
     } else {
-      (liquidity, addedAmount0, addedAmount1) =
-        _increaseLiquidity(params, state.tokenId, state.amount0, state.amount1);
+      (liquidity, addedAmount0, addedAmount1) = _increaseLiquidity(params, state);
     }
 
     unchecked {
@@ -197,13 +195,7 @@ contract ZapUniswapV3Settler is IZapUniswapV3Settler, ImmutableState, ZapAgainHe
   }
 
   /// @dev Mints a new position to the recipient with the given amounts
-  function _mint(
-    ZapInParams calldata params,
-    address token0,
-    address token1,
-    uint256 amount0,
-    uint256 amount1
-  )
+  function _mint(ZapInParams calldata params, ZapInState memory state)
     internal
     virtual
     returns (uint256 tokenId, uint256 liquidity, uint256 addedAmount0, uint256 addedAmount1)
@@ -211,13 +203,13 @@ contract ZapUniswapV3Settler is IZapUniswapV3Settler, ImmutableState, ZapAgainHe
     return IUniswapV3NFT(params.posManager)
       .mint(
         IUniswapV3NFT.MintParams({
-          token0: token0,
-          token1: token1,
+          token0: state.token0,
+          token1: state.token1,
           fee: IUniswapV3Pool(params.pool).fee(),
           tickLower: params.tickLower,
           tickUpper: params.tickUpper,
-          amount0Desired: amount0,
-          amount1Desired: amount1,
+          amount0Desired: state.amount0,
+          amount1Desired: state.amount1,
           amount0Min: 0,
           amount1Min: 0,
           recipient: params.recipient,
@@ -227,18 +219,17 @@ contract ZapUniswapV3Settler is IZapUniswapV3Settler, ImmutableState, ZapAgainHe
   }
 
   /// @dev Adds the given amounts to the position `tokenId`
-  function _increaseLiquidity(
-    ZapInParams calldata params,
-    uint256 tokenId,
-    uint256 amount0,
-    uint256 amount1
-  ) internal virtual returns (uint256 liquidity, uint256 addedAmount0, uint256 addedAmount1) {
+  function _increaseLiquidity(ZapInParams calldata params, ZapInState memory state)
+    internal
+    virtual
+    returns (uint256 liquidity, uint256 addedAmount0, uint256 addedAmount1)
+  {
     return IUniswapV3NFT(params.posManager)
       .increaseLiquidity(
         IUniswapV3NFT.IncreaseLiquidityParams({
-          tokenId: tokenId,
-          amount0Desired: amount0,
-          amount1Desired: amount1,
+          tokenId: state.tokenId,
+          amount0Desired: state.amount0,
+          amount1Desired: state.amount1,
           amount0Min: 0,
           amount1Min: 0,
           deadline: block.timestamp
