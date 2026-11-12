@@ -51,6 +51,18 @@ interface IZapUniswapV2HelperTypes {
   }
 
   /**
+   * @notice The result of previewing an addition of liquidity without a swap
+   * @param liquidity The liquidity minted
+   * @param addedAmount0 The amount of token0 added
+   * @param addedAmount1 The amount of token1 added
+   */
+  struct PreviewAddLiquidityResult {
+    uint256 liquidity;
+    uint256 addedAmount0;
+    uint256 addedAmount1;
+  }
+
+  /**
    * @notice The variable parameters for the pool swap of a Uniswap V2 zap
    * @param extraData The optimizer data
    */
