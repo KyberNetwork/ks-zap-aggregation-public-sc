@@ -6,9 +6,6 @@ import {IZapSettler} from '../IZapSettler.sol';
 /// @title IZapCurveSettler
 /// @notice Interface of {ZapCurveSettler}
 interface IZapCurveSettler is IZapSettler {
-  /// @notice Thrown when the pool type is unknown
-  error InvalidCurvePoolType();
-
   /**
    * @notice The list of Curve pool types
    * @param STABLESWAP_NG The StableSwap NG pool type

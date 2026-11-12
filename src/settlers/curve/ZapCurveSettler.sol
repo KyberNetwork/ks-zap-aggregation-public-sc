@@ -15,7 +15,9 @@ import {TokenHelper} from 'ks-common-sc/src/libraries/token/TokenHelper.sol';
 /// @title ZapCurveSettler
 /// @notice Adds liquidity to a Curve pool with the token balances this contract holds, when
 /// KSZapRouterV3 delegatecalls it in an owner call of an allowance hub fulfillment
-/// @dev The contract holds no tokens between transactions. 1 wei of each token is retained.
+/// @dev The contract holds no tokens between transactions. 1 wei of each token is retained. A pool
+/// coin equal to the native address is supplied as native balance, which is forwarded as call value
+/// to a TwoCrypto pool. WETH held by the contract is unwrapped for such a pool.
 contract ZapCurveSettler is IZapCurveSettler, ImmutableState {
   using TokenHelper for address;
   using CommonLibrary for *;
@@ -37,31 +39,39 @@ contract ZapCurveSettler is IZapCurveSettler, ImmutableState {
       N_COINS = ICurveStableSwap(params.pool).N_COINS();
     } else if (params.poolType == CurvePoolType.TRICRYPTO) {
       N_COINS = 3;
-    } else if (params.poolType == CurvePoolType.TWOCYCRYPTO) {
-      N_COINS = 2;
     } else {
-      revert InvalidCurvePoolType();
+      N_COINS = 2;
     }
 
     address[] memory tokens = new address[](N_COINS);
     bool hasWETH = false;
+    bool hasNative = false;
     for (uint256 i = 0; i < N_COINS; i++) {
       tokens[i] = ICurveStableSwap(params.pool).coins(i);
       if (tokens[i] == address(WETH)) {
         hasWETH = true;
+      } else if (tokens[i].isNative()) {
+        hasNative = true;
       }
     }
     if (hasWETH) {
       WETH.wrapETH();
+    } else if (hasNative) {
+      WETH.unwrapWETH();
     }
 
     ZapInResult memory zapInResult;
     zapInResult.pool = params.pool;
     zapInResult.recipient = params.recipient;
     zapInResult.amounts = new uint256[](N_COINS);
+    uint256 nativeValue = 0;
     for (uint256 i = 0; i < N_COINS; i++) {
-      tokens[i].forceApproveInf(params.pool);
       zapInResult.amounts[i] = tokens[i].selfBalanceMinusOne();
+      if (tokens[i].isNative()) {
+        nativeValue += zapInResult.amounts[i];
+      } else {
+        tokens[i].forceApproveInf(params.pool);
+      }
     }
 
     if (params.poolType == CurvePoolType.STABLESWAP_NG) {
@@ -74,8 +84,9 @@ contract ZapCurveSettler is IZapCurveSettler, ImmutableState {
           params.minLiquidity
         );
     } else {
-      zapInResult.liquidity = ICurveTwocrypto(params.pool)
-        .add_liquidity([zapInResult.amounts[0], zapInResult.amounts[1]], params.minLiquidity);
+      zapInResult.liquidity = ICurveTwocrypto(params.pool).add_liquidity{value: nativeValue}(
+        [zapInResult.amounts[0], zapInResult.amounts[1]], params.minLiquidity
+      );
     }
 
     _getLpToken(params.pool).safeTransfer(params.recipient, zapInResult.liquidity);
