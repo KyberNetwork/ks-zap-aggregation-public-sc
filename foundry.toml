@@ -1,4 +1,5 @@
 [profile.default]
+solc = "solar"
 optimizer = true
 optimizer_runs = 44_444_444
 fs_permissions = [{ access = "read-write", path = "./"}]
@@ -6,6 +7,11 @@ verbosity = 3
 via_ir = true
 dynamic_test_linking = true
 ffi = true
+
+# Builds with solc instead of solar, run with FOUNDRY_PROFILE=solc forge build
+[profile.solc]
+solc = "0.8.38"
+skip = ["src/KSZapRouterV3.sol", "script/DeployRouter.s.sol"]
 
 [fmt]
 line_length = 100
@@ -16,6 +22,18 @@ sort_imports = true
 
 [lint]
 lint_on_build = false
+ignore = ["src/vendors/**", "script/**", "test/**"]
+exclude_lints = [
+  "arbitrary-send-eth",
+  "block-timestamp",
+  "calls-loop",
+  "delegatecall-loop",
+  "divide-before-multiply",
+  "reentrancy-events",
+  "require-revert-in-loop",
+  "unsafe-typecast",
+  "unused-return",
+]
 
 [rpc_endpoints]
 mainnet = "${RPC_1}"

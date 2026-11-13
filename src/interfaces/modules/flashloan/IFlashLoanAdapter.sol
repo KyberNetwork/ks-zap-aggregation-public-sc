@@ -11,8 +11,6 @@ interface IFlashLoanAdapter {
   /// @notice The list of flash loan sources
   enum FlashLoanSource {
     AAVE_V3,
-    BALANCER_V2,
-    BALANCER_V3,
     ERC3156,
     MORPHO_BLUE,
     UNISWAP_V3,
