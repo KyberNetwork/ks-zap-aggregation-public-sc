@@ -123,15 +123,14 @@ contract ZapUniswapV3Settler is IZapUniswapV3Settler, ImmutableState, ZapAgainHe
     ZapInState memory state,
     ZapInResult memory zapInResult
   ) internal {
-    if (
-      LiquidityAmounts.getLiquidityForAmounts(
-          _getSqrtPriceX96(params.pool),
-          TickMath.getSqrtPriceAtTick(params.tickLower),
-          TickMath.getSqrtPriceAtTick(params.tickUpper),
-          state.amount0,
-          state.amount1
-        ) == 0
-    ) {
+    uint256 addableLiquidity = LiquidityAmounts.getLiquidityForAmounts(
+      _getSqrtPriceX96(params.pool),
+      TickMath.getSqrtPriceAtTick(params.tickLower),
+      TickMath.getSqrtPriceAtTick(params.tickUpper),
+      state.amount0,
+      state.amount1
+    );
+    if (addableLiquidity == 0) {
       return;
     }
 
