@@ -127,22 +127,15 @@ contract ZapSolidlyV2Settler is
     }
   }
 
-  /// @dev Returns the preview that a pool swap recorded for the amounts in `state` at the reserves
-  /// of the pair, or queries `previewAddLiquidity` of the helper when no record matches
+  /// @dev Returns the preview that the last pool swap recorded, or queries `previewAddLiquidity`
+  /// of the helper when no record exists
   function _preview(ZapInParams calldata params, ZapInState memory state, bytes memory fixedParams)
     internal
     returns (PreviewAddLiquidityResult memory preview)
   {
-    if (AddLiquidityPreviewRecord.exists(params.pool)) {
-      (uint256 reserve0, uint256 reserve1,) = ISolidlyV2Pair(params.pool).getReserves();
-      bytes32 recordKey = AddLiquidityPreviewRecord.key(
-        params.helper, params.pool, state.amount0, state.amount1, reserve0, reserve1
-      );
-      bool found;
-      (found, preview.liquidity, preview.addedAmount0, preview.addedAmount1) =
-        AddLiquidityPreviewRecord.consume(params.pool, recordKey);
-      if (found) return preview;
-    }
+    (preview.liquidity, preview.addedAmount0, preview.addedAmount1) =
+      AddLiquidityPreviewRecord.consume();
+    if (preview.liquidity != 0) return preview;
 
     bytes memory variableParams =
       abi.encode(PreviewZapInVariableParams({amount0: state.amount0, amount1: state.amount1}));
