@@ -7,6 +7,7 @@ import {IZapUniswapV2Settler} from '../../interfaces/settlers/uniswap-v2/IZapUni
 import {AddLiquidityPreviewHelperCaller} from '../../base/AddLiquidityPreviewHelperCaller.sol';
 import {ImmutableState} from '../../base/ImmutableState.sol';
 import {ZapAgainHelperCaller} from '../../base/ZapAgainHelperCaller.sol';
+import {AddLiquidityPreviewRecord} from '../../libraries/AddLiquidityPreviewRecord.sol';
 import {CommonLibrary} from '../../libraries/CommonLibrary.sol';
 import {IUniswapV2Pair} from '../../vendors/uniswap-v2/IUniswapV2Pair.sol';
 
@@ -109,12 +110,7 @@ contract ZapUniswapV2Settler is
     ZapInResult memory zapInResult,
     bytes memory fixedParams
   ) internal {
-    bytes memory variableParams = abi.encode(
-      PreviewZapInVariableParams({amount0: state.amount0, amount1: state.amount1})
-    );
-    PreviewAddLiquidityResult memory preview = abi.decode(
-      _previewAddLiquidity(params.helper, fixedParams, variableParams), (PreviewAddLiquidityResult)
-    );
+    PreviewAddLiquidityResult memory preview = _preview(params, state, fixedParams);
 
     if (preview.liquidity == 0) {
       return;
@@ -137,6 +133,30 @@ contract ZapUniswapV2Settler is
       zapInResult.addedAmount0 += preview.addedAmount0;
       zapInResult.addedAmount1 += preview.addedAmount1;
     }
+  }
+
+  /// @dev Returns the preview that a pool swap recorded for the amounts in `state` at the reserves
+  /// of the pair, or queries `previewAddLiquidity` of the helper when no record matches
+  function _preview(ZapInParams calldata params, ZapInState memory state, bytes memory fixedParams)
+    internal
+    returns (PreviewAddLiquidityResult memory preview)
+  {
+    if (AddLiquidityPreviewRecord.exists(params.pool)) {
+      (uint256 reserve0, uint256 reserve1,) = IUniswapV2Pair(params.pool).getReserves();
+      bytes32 recordKey = AddLiquidityPreviewRecord.key(
+        params.helper, params.pool, state.amount0, state.amount1, reserve0, reserve1
+      );
+      bool found;
+      (found, preview.liquidity, preview.addedAmount0, preview.addedAmount1) =
+        AddLiquidityPreviewRecord.consume(params.pool, recordKey);
+      if (found) return preview;
+    }
+
+    bytes memory variableParams =
+      abi.encode(PreviewZapInVariableParams({amount0: state.amount0, amount1: state.amount1}));
+    preview = abi.decode(
+      _previewAddLiquidity(params.helper, fixedParams, variableParams), (PreviewAddLiquidityResult)
+    );
   }
 
   /// @dev Swaps the remaining amounts through the helper and mints them into the pair
