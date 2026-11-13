@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.24;
 
 /// @title AddLiquidityPreviewRecord
 /// @notice Stores in transient storage, per pool, the add liquidity preview that a pool swap
