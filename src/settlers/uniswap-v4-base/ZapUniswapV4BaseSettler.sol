@@ -9,9 +9,9 @@ import {
 
 import {ImmutableState} from '../../base/ImmutableState.sol';
 import {ZapAgainHelperCaller} from '../../base/ZapAgainHelperCaller.sol';
-import {AddLiquidityAmounts} from '../../libraries/AddLiquidityAmounts.sol';
 import {CommonLibrary} from '../../libraries/CommonLibrary.sol';
 import {ZapAgainRecord} from '../../libraries/ZapAgainRecord.sol';
+import {UniswapV3MintLibrary} from '../../libraries/uniswap-v3/UniswapV3MintLibrary.sol';
 import {Actions} from '../../vendors/uniswap-v4/Actions.sol';
 import {IPoolManager} from '../../vendors/uniswap-v4/IPoolManager.sol';
 import {IPositionManager} from '../../vendors/uniswap-v4/IPositionManager.sol';
@@ -369,7 +369,7 @@ contract ZapUniswapV4BaseSettler is IZapUniswapV4BaseSettler, ImmutableState, Za
   {
     (uint160 sqrtPriceX96,,,) = state.poolManager.getSlot0(state.poolId);
 
-    (liquidity, addedAmount0, addedAmount1) = AddLiquidityAmounts.preview(
+    (liquidity, addedAmount0, addedAmount1) = UniswapV3MintLibrary.previewMint(
       sqrtPriceX96, state.sqrtPriceLowerX96, state.sqrtPriceUpperX96, state.amount0, state.amount1
     );
   }

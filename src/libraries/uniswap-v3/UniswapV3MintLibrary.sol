@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {LiquidityAmounts} from '../vendors/uniswap-v4/LiquidityAmounts.sol';
-import {SqrtPriceMath} from '../vendors/uniswap-v4/SqrtPriceMath.sol';
+import {LiquidityAmounts} from '../../vendors/uniswap-v4/LiquidityAmounts.sol';
+import {SqrtPriceMath} from '../../vendors/uniswap-v4/SqrtPriceMath.sol';
 
-/// @title AddLiquidityAmounts
-/// @notice Computes the liquidity that amounts add to a price range and the amounts it requires
-library AddLiquidityAmounts {
+/// @title UniswapV3MintLibrary
+/// @notice Computes the liquidity that amounts add to a price range of a concentrated liquidity
+/// pool in the Uniswap V3 model, and the amounts that the liquidity requires
+library UniswapV3MintLibrary {
   /**
    * @dev Computes the liquidity that the amounts add to the price range at the price, and the
    * amounts of token0 and token1, rounded up, that the liquidity requires
@@ -19,7 +20,7 @@ library AddLiquidityAmounts {
    * @return addedAmount0 The amount of token0 the liquidity requires
    * @return addedAmount1 The amount of token1 the liquidity requires
    */
-  function preview(
+  function previewMint(
     uint160 sqrtPriceX96,
     uint160 sqrtPriceLowerX96,
     uint160 sqrtPriceUpperX96,
