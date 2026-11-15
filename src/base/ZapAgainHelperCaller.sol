@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {IZapPoolSwapHelper} from '../interfaces/settlers/IZapPoolSwapHelper.sol';
+import {IZapPoolSwapAgainHelper} from '../interfaces/settlers/IZapPoolSwapAgainHelper.sol';
 import {MASK_BYTES_4} from '../libraries/BitMask.sol';
+import {PackedU128} from '../types/PackedU128.sol';
 
 import {Address} from 'openzeppelin-contracts/contracts/utils/Address.sol';
 import {TransientSlot} from 'openzeppelin-contracts/contracts/utils/TransientSlot.sol';
@@ -10,8 +11,8 @@ import {TransientSlot} from 'openzeppelin-contracts/contracts/utils/TransientSlo
 /// @title ZapAgainHelperCaller
 /// @notice Runs the pool swap of a zap again through a helper and forwards the callbacks of that
 /// swap to the helper
-/// @dev The helper runs in the context of this contract with its balances and is chosen by the
-/// caller of `ksExecute`.
+/// @dev The helper runs in the context of this contract with its balances. The owner chooses the
+/// helper and signs it in the zap in parameters.
 abstract contract ZapAgainHelperCaller {
   using TransientSlot for *;
 
@@ -19,18 +20,19 @@ abstract contract ZapAgainHelperCaller {
   bytes32 private constant ZAP_AGAIN_HELPER_SLOT =
     bytes32(uint256(keccak256('ks.zap.settler.zap-again-helper')) - 1);
 
-  /// @dev Delegatecalls `poolSwap` of the helper and returns its ABI-encoded result
-  function _poolSwap(address helper, bytes memory fixedParams, bytes memory variableParams)
+  /// @dev Delegatecalls `poolSwapAgain` of the helper and returns its decoded result
+  function _poolSwapAgain(address helper, bytes memory fixedParams, PackedU128 minZapInAmounts)
     internal
-    returns (bytes memory result)
+    returns (IZapPoolSwapAgainHelper.PoolSwapAgainResult memory result)
   {
-    bytes memory data = abi.encodeCall(IZapPoolSwapHelper.poolSwap, (fixedParams, variableParams));
+    bytes memory data =
+      abi.encodeCall(IZapPoolSwapAgainHelper.poolSwapAgain, (fixedParams, minZapInAmounts));
 
     ZAP_AGAIN_HELPER_SLOT.asAddress().tstore(helper);
     bytes memory returnData = Address.functionDelegateCall(helper, data);
     ZAP_AGAIN_HELPER_SLOT.asAddress().tstore(address(0));
 
-    return abi.decode(returnData, (bytes));
+    result = abi.decode(returnData, (IZapPoolSwapAgainHelper.PoolSwapAgainResult));
   }
 
   /// @dev Delegatecalls the helper of the ongoing pool swap with `data` and returns the raw return

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+import {PackedU128} from '../../../types/PackedU128.sol';
+
 /// @title IZapUniswapV3HelperTypes
 /// @notice Parameters and results of the Uniswap V3 helper's zap in preview
 interface IZapUniswapV3HelperTypes {
@@ -63,9 +65,31 @@ interface IZapUniswapV3HelperTypes {
   /**
    * @notice The variable parameters for the pool swap of a Uniswap V3 zap
    * @param extraData The off-chain data or the optimizer data
+   * @param zapAgain ABI-encoded {UniswapV3ZapAgainParams} that the zap again of the settler reads
+   * from the record this pool swap writes; empty clears the record
    */
   struct PoolSwapVariableParams {
     bytes extraData;
+    bytes zapAgain;
+  }
+
+  /**
+   * @notice The configuration of the zap again that the pool swap of a Uniswap V3 zap records
+   * @param minZapInAmounts The balances of token0 and token1 from which the pool swap of the zap
+   * again runs; it runs when either balance is at least its minimum
+   * @param sqrtPriceLimit0X96 The lower sqrt price limit
+   * @param sqrtPriceLimit1X96 The upper sqrt price limit
+   * @param iterations The number of iterations to binary search
+   * @param optimizer The optimizer address
+   * @param optimizeFixedParams The fixed parameters for the optimizer
+   */
+  struct UniswapV3ZapAgainParams {
+    PackedU128 minZapInAmounts;
+    uint160 sqrtPriceLimit0X96;
+    uint160 sqrtPriceLimit1X96;
+    uint256 iterations;
+    address optimizer;
+    bytes optimizeFixedParams;
   }
 
   /**

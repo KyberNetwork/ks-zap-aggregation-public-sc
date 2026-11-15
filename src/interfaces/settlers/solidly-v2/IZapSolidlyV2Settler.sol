@@ -4,8 +4,6 @@ pragma solidity ^0.8.0;
 import {IZapSettler} from '../IZapSettler.sol';
 import {IZapSolidlyV2HelperTypes} from './IZapSolidlyV2HelperTypes.sol';
 
-import {PackedU128} from '../../../types/PackedU128.sol';
-
 /// @title IZapSolidlyV2Settler
 /// @notice Interface of {ZapSolidlyV2Settler}
 interface IZapSolidlyV2Settler is IZapSettler, IZapSolidlyV2HelperTypes {
@@ -15,20 +13,16 @@ interface IZapSolidlyV2Settler is IZapSettler, IZapSolidlyV2HelperTypes {
   /**
    * @notice Parameters of the zap in
    * @param pool The pair to add liquidity to
-   * @param readBalanceFlag Whether to read the token balances, for example when using fee-on-transfer (FOT) tokens
-   * @param helper The helper queried for the amounts of each mint and delegatecalled for the pool
-   * swap of the zap again
-   * @param minZapInAmounts The remaining amounts of token0 and token1 from which the zap again runs;
-   * it runs when either remaining amount is at least its minimum
+   * @param helper The helper queried for the amounts of the first mint when the pool swap recorded
+   * none, and delegatecalled for the pool swap of the zap again; the zap again does not run when it
+   * is the zero address
    * @param minLiquidity The minimum liquidity to add
    * @param recipient The receiver of the liquidity tokens
    * @param refundRecipient The receiver of the remaining tokens
    */
   struct ZapInParams {
     address pool;
-    bool readBalanceFlag;
     address helper;
-    PackedU128 minZapInAmounts;
     uint256 minLiquidity;
     address recipient;
     address refundRecipient;

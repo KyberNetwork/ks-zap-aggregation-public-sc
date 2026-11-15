@@ -2,21 +2,22 @@
 pragma solidity 0.8.38;
 
 import {IKSZapExecutor} from '../../interfaces/IKSZapExecutor.sol';
+import {IZapPoolSwapAgainHelper} from '../../interfaces/settlers/IZapPoolSwapAgainHelper.sol';
 import {
   IZapPancakeInfinityBaseSettler
 } from '../../interfaces/settlers/pancake-infinity-base/IZapPancakeInfinityBaseSettler.sol';
 
 import {ImmutableState} from '../../base/ImmutableState.sol';
 import {ZapAgainHelperCaller} from '../../base/ZapAgainHelperCaller.sol';
+import {AddLiquidityAmounts} from '../../libraries/AddLiquidityAmounts.sol';
 import {CommonLibrary} from '../../libraries/CommonLibrary.sol';
+import {ZapAgainRecord} from '../../libraries/ZapAgainRecord.sol';
 
 import {Actions} from '../../vendors/pancake-infinity/Actions.sol';
 import {ICLPoolManager} from '../../vendors/pancake-infinity/ICLPoolManager.sol';
 import {ICLPositionManager} from '../../vendors/pancake-infinity/ICLPositionManager.sol';
 import {IVault} from '../../vendors/pancake-infinity/IVault.sol';
 
-import {LiquidityAmounts} from '../../vendors/uniswap-v4/LiquidityAmounts.sol';
-import {SqrtPriceMath} from '../../vendors/uniswap-v4/SqrtPriceMath.sol';
 import {TickMath} from '../../vendors/uniswap-v4/TickMath.sol';
 
 import {IAllowanceTransfer} from 'ks-common-sc/src/interfaces/IAllowanceTransfer.sol';
@@ -130,14 +131,12 @@ contract ZapPancakeInfinityBaseSettler is
     zapInResult.originalAmount0 = state.amount0;
     zapInResult.originalAmount1 = state.amount1;
 
+    bytes memory zapAgainParams = ZapAgainRecord.consume();
+
     _addLiquidity(params, state, zapInResult);
 
-    if (
-      params.zapAgain.helper != address(0)
-        && (state.amount0 >= params.zapAgain.minZapInAmounts.value0()
-          || state.amount1 >= params.zapAgain.minZapInAmounts.value1())
-    ) {
-      _zapAgain(params, state, zapInResult);
+    if (zapAgainParams.length != 0 && params.helper != address(0)) {
+      _zapAgain(params, state, zapInResult, zapAgainParams);
     }
 
     require(
@@ -161,6 +160,27 @@ contract ZapPancakeInfinityBaseSettler is
       return;
     }
 
+    _modifyLiquidity(params, state, zapInResult, liquidity, addedAmount0, addedAmount1);
+  }
+
+  /**
+   * @dev Adds `liquidity` to the position, settling the amounts it requires, and records the
+   * addition in `zapInResult`
+   * @param params The zap in parameters
+   * @param state The pool, the price range and the amounts held, updated with the amounts left
+   * @param zapInResult The result updated with the liquidity and the amounts added
+   * @param liquidity The liquidity to add
+   * @param addedAmount0 The amount of currency0 the liquidity requires
+   * @param addedAmount1 The amount of currency1 the liquidity requires
+   */
+  function _modifyLiquidity(
+    ZapInParams calldata params,
+    ZapInState memory state,
+    ZapInResult memory zapInResult,
+    uint128 liquidity,
+    uint256 addedAmount0,
+    uint256 addedAmount1
+  ) internal {
     bool currency0Native = params.poolKey.currency0.isNative();
     uint128 liquidityBefore = 0;
 
@@ -274,12 +294,17 @@ contract ZapPancakeInfinityBaseSettler is
     }
   }
 
-  /// @dev Swaps the remaining amounts through the helper and adds them to the position
+  /// @dev Swaps the remaining amounts through the helper and adds the resulting liquidity to the
+  /// position
   function _zapAgain(
     ZapInParams calldata params,
     ZapInState memory state,
-    ZapInResult memory zapInResult
+    ZapInResult memory zapInResult,
+    bytes memory zapAgainParams
   ) internal {
+    PancakeInfinityZapAgainParams memory zapAgain =
+      abi.decode(zapAgainParams, (PancakeInfinityZapAgainParams));
+
     bytes memory fixedParams = abi.encode(
       ZapInFixedParams({
         posManager: params.posManager,
@@ -287,26 +312,32 @@ contract ZapPancakeInfinityBaseSettler is
         poolKey: params.poolKey,
         tickLower: params.tickLower,
         tickUpper: params.tickUpper,
-        sqrtPriceLimit0X96: params.zapAgain.sqrtPriceLimit0X96,
-        sqrtPriceLimit1X96: params.zapAgain.sqrtPriceLimit1X96,
-        iterations: params.zapAgain.iterations,
-        swapHookData: params.zapAgain.swapHookData,
+        sqrtPriceLimit0X96: zapAgain.sqrtPriceLimit0X96,
+        sqrtPriceLimit1X96: zapAgain.sqrtPriceLimit1X96,
+        iterations: zapAgain.iterations,
+        swapHookData: zapAgain.swapHookData,
         addLiquidityHookData: '',
-        optimizer: address(0),
-        optimizeFixedParams: '',
+        optimizer: zapAgain.optimizer,
+        optimizeFixedParams: zapAgain.optimizeFixedParams,
         readBalanceFlag: params.readBalanceFlag
       })
     );
-    bytes memory variableParams = abi.encode(PoolSwapVariableParams({extraData: ''}));
 
-    PoolSwapResult memory swapResult =
-      abi.decode(_poolSwap(params.zapAgain.helper, fixedParams, variableParams), (PoolSwapResult));
+    IZapPoolSwapAgainHelper.PoolSwapAgainResult memory result =
+      _poolSwapAgain(params.helper, fixedParams, zapAgain.minZapInAmounts);
 
-    state.amount0 = swapResult.amount0;
-    state.amount1 = swapResult.amount1;
+    state.amount0 = result.amount0;
+    state.amount1 = result.amount1;
 
-    if (swapResult.positionLiquidity != 0) {
-      _addLiquidity(params, state, zapInResult);
+    if (result.liquidity != 0) {
+      _modifyLiquidity(
+        params,
+        state,
+        zapInResult,
+        uint128(result.liquidity),
+        result.addedAmount0,
+        result.addedAmount1
+      );
     }
   }
 
@@ -341,25 +372,8 @@ contract ZapPancakeInfinityBaseSettler is
   {
     (uint160 sqrtPriceX96,,,) = state.clPoolManager.getSlot0(state.poolId);
 
-    liquidity = uint128(
-      LiquidityAmounts.getLiquidityForAmounts(
-        sqrtPriceX96, state.sqrtPriceLowerX96, state.sqrtPriceUpperX96, state.amount0, state.amount1
-      )
+    (liquidity, addedAmount0, addedAmount1) = AddLiquidityAmounts.preview(
+      sqrtPriceX96, state.sqrtPriceLowerX96, state.sqrtPriceUpperX96, state.amount0, state.amount1
     );
-
-    if (sqrtPriceX96 <= state.sqrtPriceLowerX96) {
-      addedAmount0 = SqrtPriceMath.getAmount0Delta(
-        state.sqrtPriceLowerX96, state.sqrtPriceUpperX96, liquidity, true
-      );
-    } else if (sqrtPriceX96 < state.sqrtPriceUpperX96) {
-      addedAmount0 =
-        SqrtPriceMath.getAmount0Delta(sqrtPriceX96, state.sqrtPriceUpperX96, liquidity, true);
-      addedAmount1 =
-        SqrtPriceMath.getAmount1Delta(state.sqrtPriceLowerX96, sqrtPriceX96, liquidity, true);
-    } else {
-      addedAmount1 = SqrtPriceMath.getAmount1Delta(
-        state.sqrtPriceLowerX96, state.sqrtPriceUpperX96, liquidity, true
-      );
-    }
   }
 }

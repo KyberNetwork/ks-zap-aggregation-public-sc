@@ -4,8 +4,6 @@ pragma solidity ^0.8.0;
 import {IZapSettler} from '../IZapSettler.sol';
 import {IZapUniswapV2HelperTypes} from './IZapUniswapV2HelperTypes.sol';
 
-import {PackedU128} from '../../../types/PackedU128.sol';
-
 /// @title IZapUniswapV2Settler
 /// @notice Interface of {ZapUniswapV2Settler}
 interface IZapUniswapV2Settler is IZapSettler, IZapUniswapV2HelperTypes {
@@ -15,26 +13,22 @@ interface IZapUniswapV2Settler is IZapSettler, IZapUniswapV2HelperTypes {
   /**
    * @notice Parameters of the zap in
    * @param pool The pair to add liquidity to
-   * @param swapFee The swap fee
-   * @param protocolFee The protocol fee
-   * @param feeDenominator The fee denominator
-   * @param readBalanceFlag Whether to read the token balances, used for fee-on-transfer or rebasing tokens
-   * @param helper The helper queried for the amounts of each mint and delegatecalled for the pool
-   * swap of the zap again
-   * @param minZapInAmounts The remaining amounts of token0 and token1 from which the zap again runs;
-   * it runs when either remaining amount is at least its minimum
+   * @param helper The helper queried for the amounts of the first mint when the pool swap recorded
+   * none, and delegatecalled for the pool swap of the zap again; the zap again does not run when it
+   * is the zero address
+   * @param swapFee The swap fee of the first mint preview
+   * @param protocolFee The protocol fee of the first mint preview
+   * @param feeDenominator The fee denominator of the first mint preview
    * @param minLiquidity The minimum liquidity to add
    * @param recipient The receiver of the liquidity tokens
    * @param refundRecipient The receiver of the remaining tokens
    */
   struct ZapInParams {
     address pool;
+    address helper;
     uint24 swapFee;
     uint24 protocolFee;
     uint24 feeDenominator;
-    bool readBalanceFlag;
-    address helper;
-    PackedU128 minZapInAmounts;
     uint256 minLiquidity;
     address recipient;
     address refundRecipient;

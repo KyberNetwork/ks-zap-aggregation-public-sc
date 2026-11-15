@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+import {PackedU128} from '../../../types/PackedU128.sol';
+
 /// @title IZapUniswapV2HelperTypes
 /// @notice Parameters and results of the Uniswap V2 helper's previews
 interface IZapUniswapV2HelperTypes {
@@ -65,9 +67,32 @@ interface IZapUniswapV2HelperTypes {
   /**
    * @notice The variable parameters for the pool swap of a Uniswap V2 zap
    * @param extraData The optimizer data
+   * @param zapAgain The ABI-encoded {ZapAgainParams} that the settler uses for the zap again of the
+   * owner call; empty clears the record, and no zap again runs
    */
   struct PoolSwapVariableParams {
     bytes extraData;
+    bytes zapAgain;
+  }
+
+  /**
+   * @notice The parameters of the zap again of a Uniswap V2 zap
+   * @param minZapInAmounts The balances of token0 and token1 from which the pool swap runs
+   * @param swapFee The swap fee
+   * @param protocolFee The protocol fee
+   * @param feeDenominator The fee denominator
+   * @param readBalanceFlag Whether to read the token balances, used for fee-on-transfer or rebasing tokens
+   * @param optimizer The optimizer address
+   * @param optimizeFixedParams The fixed parameters for the optimizer
+   */
+  struct ZapAgainParams {
+    PackedU128 minZapInAmounts;
+    uint24 swapFee;
+    uint24 protocolFee;
+    uint24 feeDenominator;
+    bool readBalanceFlag;
+    address optimizer;
+    bytes optimizeFixedParams;
   }
 
   /**

@@ -2,6 +2,7 @@
 pragma solidity 0.8.38;
 
 import {IKSZapExecutor} from '../../interfaces/IKSZapExecutor.sol';
+import {IZapPoolSwapAgainHelper} from '../../interfaces/settlers/IZapPoolSwapAgainHelper.sol';
 import {IZapUniswapV2Settler} from '../../interfaces/settlers/uniswap-v2/IZapUniswapV2Settler.sol';
 
 import {AddLiquidityPreviewHelperCaller} from '../../base/AddLiquidityPreviewHelperCaller.sol';
@@ -9,6 +10,7 @@ import {ImmutableState} from '../../base/ImmutableState.sol';
 import {ZapAgainHelperCaller} from '../../base/ZapAgainHelperCaller.sol';
 import {AddLiquidityPreviewRecord} from '../../libraries/AddLiquidityPreviewRecord.sol';
 import {CommonLibrary} from '../../libraries/CommonLibrary.sol';
+import {ZapAgainRecord} from '../../libraries/ZapAgainRecord.sol';
 import {IUniswapV2Pair} from '../../vendors/uniswap-v2/IUniswapV2Pair.sol';
 
 import {TokenHelper} from 'ks-common-sc/src/libraries/token/TokenHelper.sol';
@@ -16,7 +18,10 @@ import {TokenHelper} from 'ks-common-sc/src/libraries/token/TokenHelper.sol';
 /// @title ZapUniswapV2Settler
 /// @notice Adds liquidity to a Uniswap V2 pair with the token balances this contract holds, when
 /// KSZapRouterV3 delegatecalls it in an owner call of an allowance hub fulfillment
-/// @dev The contract holds no tokens between transactions. 1 wei of each token is retained.
+/// @dev The contract holds no tokens between transactions. 1 wei of each token is retained. The
+/// zap again runs when the preceding pool swap of the solver recorded zap again parameters and the
+/// owner-signed helper is set; the helper then swaps the remaining balances and returns the
+/// liquidity to add.
 contract ZapUniswapV2Settler is
   IZapUniswapV2Settler,
   ImmutableState,
@@ -46,6 +51,8 @@ contract ZapUniswapV2Settler is
       params := data.offset
     }
 
+    bytes memory zapAgainParams = ZapAgainRecord.consume();
+
     ZapInState memory state;
     state.token0 = IUniswapV2Pair(params.pool).token0();
     state.token1 = IUniswapV2Pair(params.pool).token1();
@@ -63,25 +70,11 @@ contract ZapUniswapV2Settler is
     zapInResult.originalAmount0 = state.amount0;
     zapInResult.originalAmount1 = state.amount1;
 
-    bytes memory fixedParams = abi.encode(
-      ZapInFixedParams({
-        pool: params.pool,
-        swapFee: params.swapFee,
-        protocolFee: params.protocolFee,
-        feeDenominator: params.feeDenominator,
-        readBalanceFlag: params.readBalanceFlag,
-        optimizer: address(0),
-        optimizeFixedParams: ''
-      })
-    );
+    PreviewAddLiquidityResult memory preview = _preview(params, state);
+    _mint(params, state, zapInResult, preview);
 
-    _mint(params, state, zapInResult, fixedParams);
-
-    if (
-      state.amount0 >= params.minZapInAmounts.value0()
-        || state.amount1 >= params.minZapInAmounts.value1()
-    ) {
-      _zapAgain(params, state, zapInResult, fixedParams);
+    if (zapAgainParams.length != 0 && params.helper != address(0)) {
+      _zapAgain(params, state, zapInResult, zapAgainParams);
     }
 
     require(zapInResult.liquidity >= params.minLiquidity, ZapInUniswapV2InsufficientLiquidity());
@@ -102,16 +95,14 @@ contract ZapUniswapV2Settler is
     return result;
   }
 
-  /// @dev Transfers the amounts that the helper previews to the pair, mints to the recipient and
-  /// records the minted liquidity and the added amounts in `zapInResult`
+  /// @dev Transfers the previewed amounts to the pair, mints to the recipient and records the
+  /// minted liquidity and the added amounts in `zapInResult`
   function _mint(
     ZapInParams calldata params,
     ZapInState memory state,
     ZapInResult memory zapInResult,
-    bytes memory fixedParams
+    PreviewAddLiquidityResult memory preview
   ) internal {
-    PreviewAddLiquidityResult memory preview = _preview(params, state, fixedParams);
-
     if (preview.liquidity == 0) {
       return;
     }
@@ -121,14 +112,6 @@ contract ZapUniswapV2Settler is
     uint256 liquidity = IUniswapV2Pair(params.pool).mint(params.recipient);
 
     unchecked {
-      if (params.readBalanceFlag) {
-        state.amount0 = state.token0.selfBalanceMinusOne();
-        state.amount1 = state.token1.selfBalanceMinusOne();
-      } else {
-        state.amount0 -= preview.addedAmount0;
-        state.amount1 -= preview.addedAmount1;
-      }
-
       zapInResult.liquidity += liquidity;
       zapInResult.addedAmount0 += preview.addedAmount0;
       zapInResult.addedAmount1 += preview.addedAmount1;
@@ -137,7 +120,7 @@ contract ZapUniswapV2Settler is
 
   /// @dev Returns the preview that the last pool swap recorded, or queries `previewAddLiquidity`
   /// of the helper when no record exists
-  function _preview(ZapInParams calldata params, ZapInState memory state, bytes memory fixedParams)
+  function _preview(ZapInParams calldata params, ZapInState memory state)
     internal
     returns (PreviewAddLiquidityResult memory preview)
   {
@@ -145,6 +128,17 @@ contract ZapUniswapV2Settler is
       AddLiquidityPreviewRecord.consume();
     if (preview.liquidity != 0) return preview;
 
+    bytes memory fixedParams = abi.encode(
+      ZapInFixedParams({
+        pool: params.pool,
+        swapFee: params.swapFee,
+        protocolFee: params.protocolFee,
+        feeDenominator: params.feeDenominator,
+        readBalanceFlag: false,
+        optimizer: address(0),
+        optimizeFixedParams: ''
+      })
+    );
     bytes memory variableParams =
       abi.encode(PreviewZapInVariableParams({amount0: state.amount0, amount1: state.amount1}));
     preview = abi.decode(
@@ -152,21 +146,36 @@ contract ZapUniswapV2Settler is
     );
   }
 
-  /// @dev Swaps the remaining amounts through the helper and mints them into the pair
+  /// @dev Swaps the remaining amounts through the helper with the zap again parameters that the
+  /// solver recorded and mints the liquidity that the helper returns into the pair
   function _zapAgain(
     ZapInParams calldata params,
     ZapInState memory state,
     ZapInResult memory zapInResult,
-    bytes memory fixedParams
+    bytes memory zapAgainParams
   ) internal {
-    bytes memory variableParams = abi.encode(PoolSwapVariableParams({extraData: ''}));
+    ZapAgainParams memory again = abi.decode(zapAgainParams, (ZapAgainParams));
 
-    PoolSwapResult memory swapResult =
-      abi.decode(_poolSwap(params.helper, fixedParams, variableParams), (PoolSwapResult));
+    bytes memory fixedParams = abi.encode(
+      ZapInFixedParams({
+        pool: params.pool,
+        swapFee: again.swapFee,
+        protocolFee: again.protocolFee,
+        feeDenominator: again.feeDenominator,
+        readBalanceFlag: again.readBalanceFlag,
+        optimizer: again.optimizer,
+        optimizeFixedParams: again.optimizeFixedParams
+      })
+    );
 
-    state.amount0 = swapResult.amount0;
-    state.amount1 = swapResult.amount1;
+    IZapPoolSwapAgainHelper.PoolSwapAgainResult memory result =
+      _poolSwapAgain(params.helper, fixedParams, again.minZapInAmounts);
 
-    _mint(params, state, zapInResult, fixedParams);
+    PreviewAddLiquidityResult memory preview = PreviewAddLiquidityResult({
+      liquidity: result.liquidity,
+      addedAmount0: result.addedAmount0,
+      addedAmount1: result.addedAmount1
+    });
+    _mint(params, state, zapInResult, preview);
   }
 }

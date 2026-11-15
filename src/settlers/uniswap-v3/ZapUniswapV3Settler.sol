@@ -2,11 +2,13 @@
 pragma solidity 0.8.38;
 
 import {IKSZapExecutor} from '../../interfaces/IKSZapExecutor.sol';
+import {IZapPoolSwapAgainHelper} from '../../interfaces/settlers/IZapPoolSwapAgainHelper.sol';
 import {IZapUniswapV3Settler} from '../../interfaces/settlers/uniswap-v3/IZapUniswapV3Settler.sol';
 
 import {ImmutableState} from '../../base/ImmutableState.sol';
 import {ZapAgainHelperCaller} from '../../base/ZapAgainHelperCaller.sol';
 import {CommonLibrary} from '../../libraries/CommonLibrary.sol';
+import {ZapAgainRecord} from '../../libraries/ZapAgainRecord.sol';
 import {IUniswapV3NFT} from '../../vendors/uniswap-v3/IUniswapV3NFT.sol';
 import {IUniswapV3Pool} from '../../vendors/uniswap-v3/IUniswapV3Pool.sol';
 import {LiquidityAmounts} from '../../vendors/uniswap-v4/LiquidityAmounts.sol';
@@ -48,6 +50,8 @@ contract ZapUniswapV3Settler is IZapUniswapV3Settler, ImmutableState, ZapAgainHe
 
   /// @inheritdoc IKSZapExecutor
   function executeZap(bytes calldata data) external payable returns (bytes memory) {
+    bytes memory zapAgainParams = ZapAgainRecord.consume();
+
     ZapInParams calldata params;
     assembly ('memory-safe') {
       params := add(data.offset, calldataload(data.offset))
@@ -80,12 +84,8 @@ contract ZapUniswapV3Settler is IZapUniswapV3Settler, ImmutableState, ZapAgainHe
 
     _addLiquidity(params, state, zapInResult);
 
-    if (
-      params.zapAgain.helper != address(0)
-        && (state.amount0 >= params.zapAgain.minZapInAmounts.value0()
-          || state.amount1 >= params.zapAgain.minZapInAmounts.value1())
-    ) {
-      _zapAgain(params, state, zapInResult);
+    if (zapAgainParams.length != 0 && params.helper != address(0)) {
+      _zapAgain(params, state, zapInResult, zapAgainParams);
     }
 
     require(
@@ -134,6 +134,16 @@ contract ZapUniswapV3Settler is IZapUniswapV3Settler, ImmutableState, ZapAgainHe
       return;
     }
 
+    _modifyPosition(params, state, zapInResult);
+  }
+
+  /// @dev Mints the position or increases its liquidity with the amounts in `state` and records
+  /// the addition in `zapInResult`
+  function _modifyPosition(
+    ZapInParams calldata params,
+    ZapInState memory state,
+    ZapInResult memory zapInResult
+  ) internal {
     uint256 liquidity;
     uint256 addedAmount0;
     uint256 addedAmount1;
@@ -152,36 +162,41 @@ contract ZapUniswapV3Settler is IZapUniswapV3Settler, ImmutableState, ZapAgainHe
     }
   }
 
-  /// @dev Swaps the remaining amounts through the helper and adds them to the position
+  /// @dev Swaps the remaining amounts through the helper with the recorded configuration and adds
+  /// the liquidity it returns to the position
   function _zapAgain(
     ZapInParams calldata params,
     ZapInState memory state,
-    ZapInResult memory zapInResult
+    ZapInResult memory zapInResult,
+    bytes memory zapAgainParams
   ) internal {
+    UniswapV3ZapAgainParams memory zapAgain = abi.decode(zapAgainParams, (UniswapV3ZapAgainParams));
+
     bytes memory fixedParams = abi.encode(
       ZapInFixedParams({
         posManager: params.posManager,
         pool: params.pool,
         tickLower: params.tickLower,
         tickUpper: params.tickUpper,
-        sqrtPriceLimit0X96: params.zapAgain.sqrtPriceLimit0X96,
-        sqrtPriceLimit1X96: params.zapAgain.sqrtPriceLimit1X96,
-        iterations: params.zapAgain.iterations,
-        optimizer: address(0),
-        optimizeFixedParams: ''
+        sqrtPriceLimit0X96: zapAgain.sqrtPriceLimit0X96,
+        sqrtPriceLimit1X96: zapAgain.sqrtPriceLimit1X96,
+        iterations: zapAgain.iterations,
+        optimizer: zapAgain.optimizer,
+        optimizeFixedParams: zapAgain.optimizeFixedParams
       })
     );
-    bytes memory variableParams = abi.encode(PoolSwapVariableParams({extraData: ''}));
 
-    PoolSwapResult memory swapResult =
-      abi.decode(_poolSwap(params.zapAgain.helper, fixedParams, variableParams), (PoolSwapResult));
+    IZapPoolSwapAgainHelper.PoolSwapAgainResult memory result =
+      _poolSwapAgain(params.helper, fixedParams, zapAgain.minZapInAmounts);
 
-    state.amount0 = swapResult.amount0;
-    state.amount1 = swapResult.amount1;
-
-    if (swapResult.positionLiquidity != 0) {
-      _addLiquidity(params, state, zapInResult);
+    if (result.liquidity == 0) {
+      return;
     }
+
+    state.amount0 = result.amount0;
+    state.amount1 = result.amount1;
+
+    _modifyPosition(params, state, zapInResult);
   }
 
   /// @dev Reads the leading price word of the `slot0` getter of the pool

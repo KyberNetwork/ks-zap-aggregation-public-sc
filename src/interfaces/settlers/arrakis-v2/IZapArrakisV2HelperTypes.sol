@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+import {PackedU128} from '../../../types/PackedU128.sol';
+
 /// @title IZapArrakisV2HelperTypes
 /// @notice Parameters and results of the Arrakis V2 helper's zap in preview
 interface IZapArrakisV2HelperTypes {
@@ -59,9 +61,27 @@ interface IZapArrakisV2HelperTypes {
   /**
    * @notice The variable parameters for the pool swap of an Arrakis V2 zap
    * @param offchainData The off-chain data
+   * @param zapAgain The ABI-encoded {ArrakisV2ZapAgainParams} that the next owner call uses for the
+   * zap again; empty clears the record of the zap again
    */
   struct PoolSwapVariableParams {
     bytes offchainData;
+    bytes zapAgain;
+  }
+
+  /**
+   * @notice The parameters of the zap again of an Arrakis V2 zap
+   * @param minZapInAmounts The remaining amounts of token0 and token1 from which the pool swap of
+   * the zap again runs; it runs when either remaining amount is at least its minimum
+   * @param sqrtPriceLimit0X96 The lower sqrt price limit of the swap preview
+   * @param sqrtPriceLimit1X96 The upper sqrt price limit of the swap preview
+   * @param iterations The number of binary search iterations of the swap preview
+   */
+  struct ArrakisV2ZapAgainParams {
+    PackedU128 minZapInAmounts;
+    uint160 sqrtPriceLimit0X96;
+    uint160 sqrtPriceLimit1X96;
+    uint256 iterations;
   }
 
   /**

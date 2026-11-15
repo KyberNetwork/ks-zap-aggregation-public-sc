@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+import {PackedU128} from '../../../types/PackedU128.sol';
+
 /// @title IZapBrownFiV3HelperTypes
 /// @notice Parameters and results of the BrownFi V3 helper's previews
 interface IZapBrownFiV3HelperTypes {
@@ -50,6 +52,27 @@ interface IZapBrownFiV3HelperTypes {
     uint256 liquidity;
     uint256 addedAmount0;
     uint256 addedAmount1;
+  }
+
+  /**
+   * @notice The variable parameters for the pool swap of a BrownFi V3 zap
+   * @param extraData Ignored
+   * @param zapAgain The ABI-encoded {ZapAgainParams} that the settler uses for the zap again of the
+   * owner call; empty clears the record, and no zap again runs
+   */
+  struct PoolSwapVariableParams {
+    bytes extraData;
+    bytes zapAgain;
+  }
+
+  /**
+   * @notice The parameters of the zap again of a BrownFi V3 zap
+   * @param minZapInAmounts The balances of token0 and token1 from which the pool swap runs
+   * @param iterations The number of binary-search iterations
+   */
+  struct ZapAgainParams {
+    PackedU128 minZapInAmounts;
+    uint256 iterations;
   }
 
   /**

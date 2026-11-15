@@ -5,31 +5,12 @@ import {IZapSettler} from '../IZapSettler.sol';
 import {IZapUniswapV3HelperTypes} from './IZapUniswapV3HelperTypes.sol';
 
 import {PackedBits} from '../../../types/PackedBits.sol';
-import {PackedU128} from '../../../types/PackedU128.sol';
 
 /// @title IZapUniswapV3Settler
 /// @notice Interface of {ZapUniswapV3Settler}
 interface IZapUniswapV3Settler is IZapSettler, IZapUniswapV3HelperTypes {
   /// @notice Thrown when the added liquidity is below the minimum
   error ZapInUniswapV3InsufficientLiquidity();
-
-  /**
-   * @notice Parameters of the swap and the second liquidity addition with the remaining tokens
-   * @param helper The helper delegatecalled for the pool swap of the zap again; the zero address
-   * disables the zap again
-   * @param minZapInAmounts The remaining amounts of token0 and token1 from which the zap again runs;
-   * it runs when either remaining amount is at least its minimum
-   * @param sqrtPriceLimit0X96 The lower sqrt price limit of the swap preview
-   * @param sqrtPriceLimit1X96 The upper sqrt price limit of the swap preview
-   * @param iterations The number of binary search iterations of the swap preview
-   */
-  struct ZapAgainParams {
-    address helper;
-    PackedU128 minZapInAmounts;
-    uint160 sqrtPriceLimit0X96;
-    uint160 sqrtPriceLimit1X96;
-    uint256 iterations;
-  }
 
   /**
    * @notice Parameters of the zap in
@@ -45,7 +26,8 @@ interface IZapUniswapV3Settler is IZapSettler, IZapUniswapV3HelperTypes {
    * @param recipient The receiver of the position; a position held by this contract is transferred
    * to it
    * @param refundRecipient The receiver of the remaining tokens
-   * @param zapAgain Parameters of the zap again
+   * @param helper The helper delegatecalled for the pool swap of the zap again; the zero address
+   * disables the zap again
    */
   struct ZapInParams {
     address posManager;
@@ -58,7 +40,7 @@ interface IZapUniswapV3Settler is IZapSettler, IZapUniswapV3HelperTypes {
     uint128 minLiquidity;
     address recipient;
     address refundRecipient;
-    ZapAgainParams zapAgain;
+    address helper;
   }
 
   /**

@@ -7,33 +7,12 @@ import {IZapPancakeInfinityBaseHelperTypes} from './IZapPancakeInfinityBaseHelpe
 import {PoolKey} from '../../../vendors/pancake-infinity/PoolKey.sol';
 
 import {PackedBits} from '../../../types/PackedBits.sol';
-import {PackedU128} from '../../../types/PackedU128.sol';
 
 /// @title IZapPancakeInfinityBaseSettler
 /// @notice Interface of {ZapPancakeInfinityBaseSettler}
 interface IZapPancakeInfinityBaseSettler is IZapSettler, IZapPancakeInfinityBaseHelperTypes {
   /// @notice Thrown when the added liquidity is below the minimum
   error ZapInPancakeInfinityInsufficientLiquidity();
-
-  /**
-   * @notice Parameters of the swap and the second liquidity addition with the remaining tokens
-   * @param helper The helper delegatecalled for the pool swap of the zap again; the zero address
-   * disables the zap again
-   * @param minZapInAmounts The remaining amounts of currency0 and currency1 from which the zap again
-   * runs; it runs when either remaining amount is at least its minimum
-   * @param sqrtPriceLimit0X96 The lower sqrt price limit of the swap preview
-   * @param sqrtPriceLimit1X96 The upper sqrt price limit of the swap preview
-   * @param iterations The number of binary search iterations of the swap preview
-   * @param swapHookData The data for the hook of the zap again swap
-   */
-  struct ZapAgainParams {
-    address helper;
-    PackedU128 minZapInAmounts;
-    uint160 sqrtPriceLimit0X96;
-    uint160 sqrtPriceLimit1X96;
-    uint256 iterations;
-    bytes swapHookData;
-  }
 
   /**
    * @notice Parameters of the zap in
@@ -52,7 +31,8 @@ interface IZapPancakeInfinityBaseSettler is IZapSettler, IZapPancakeInfinityBase
    * @param minLiquidity The minimum liquidity to add
    * @param recipient The receiver of the position
    * @param refundRecipient The receiver of the remaining tokens
-   * @param zapAgain Parameters of the zap again
+   * @param helper The helper delegatecalled for the pool swap of the zap again; the zero address
+   * disables the zap again
    */
   struct ZapInParams {
     address posManager;
@@ -67,7 +47,7 @@ interface IZapPancakeInfinityBaseSettler is IZapSettler, IZapPancakeInfinityBase
     uint128 minLiquidity;
     address recipient;
     address refundRecipient;
-    ZapAgainParams zapAgain;
+    address helper;
   }
 
   /**

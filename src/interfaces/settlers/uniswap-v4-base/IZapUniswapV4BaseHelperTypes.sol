@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+import {PackedU128} from '../../../types/PackedU128.sol';
 import {PoolKey} from '../../../vendors/uniswap-v4/PoolKey.sol';
 
 /// @title IZapUniswapV4BaseHelperTypes
@@ -74,9 +75,33 @@ interface IZapUniswapV4BaseHelperTypes {
   /**
    * @notice The variable parameters for the pool swap of a Uniswap V4 zap
    * @param extraData The off-chain data or the optimizer data
+   * @param zapAgain The ABI-encoded {UniswapV4ZapAgainParams} recorded for the zap again of the owner call,
+   * empty for no zap again
    */
   struct PoolSwapVariableParams {
     bytes extraData;
+    bytes zapAgain;
+  }
+
+  /**
+   * @notice The parameters of the zap again that the solver chooses
+   * @param minZapInAmounts The remaining amounts of token0 and token1 from which the zap again
+   * swaps; it swaps when either remaining amount is at least its minimum
+   * @param sqrtPriceLimit0X96 The lower sqrt price limit
+   * @param sqrtPriceLimit1X96 The upper sqrt price limit
+   * @param iterations The number of iterations to binary search
+   * @param swapHookData The data for the swap hook
+   * @param optimizer The optimizer address
+   * @param optimizeFixedParams The fixed parameters for the optimizer
+   */
+  struct UniswapV4ZapAgainParams {
+    PackedU128 minZapInAmounts;
+    uint160 sqrtPriceLimit0X96;
+    uint160 sqrtPriceLimit1X96;
+    uint256 iterations;
+    bytes swapHookData;
+    address optimizer;
+    bytes optimizeFixedParams;
   }
 
   /**

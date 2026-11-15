@@ -5,31 +5,12 @@ import {IZapSettler} from '../IZapSettler.sol';
 import {IZapArrakisV2HelperTypes} from './IZapArrakisV2HelperTypes.sol';
 
 import {PackedBits} from '../../../types/PackedBits.sol';
-import {PackedU128} from '../../../types/PackedU128.sol';
 
 /// @title IZapArrakisV2Settler
 /// @notice Interface of {ZapArrakisV2Settler}
 interface IZapArrakisV2Settler is IZapSettler, IZapArrakisV2HelperTypes {
   /// @notice Thrown when the shares minted are below the minimum
   error ZapArrakisV2InsufficientShares();
-
-  /**
-   * @notice Parameters of the swap and the second deposit with the remaining tokens
-   * @param helper The helper delegatecalled for the pool swap of the zap again; the zero address
-   * disables the zap again
-   * @param minZapInAmounts The remaining amounts of token0 and token1 from which the zap again runs;
-   * it runs when either remaining amount is at least its minimum
-   * @param sqrtPriceLimit0X96 The lower sqrt price limit of the swap preview
-   * @param sqrtPriceLimit1X96 The upper sqrt price limit of the swap preview
-   * @param iterations The number of binary search iterations of the swap preview
-   */
-  struct ZapAgainParams {
-    address helper;
-    PackedU128 minZapInAmounts;
-    uint160 sqrtPriceLimit0X96;
-    uint160 sqrtPriceLimit1X96;
-    uint256 iterations;
-  }
 
   /**
    * @notice Parameters of the zap in
@@ -42,7 +23,8 @@ interface IZapArrakisV2Settler is IZapSettler, IZapArrakisV2HelperTypes {
    * @param minShares The minimum shares to mint
    * @param recipient The receiver of the shares
    * @param refundRecipient The receiver of the remaining tokens
-   * @param zapAgain Parameters of the zap again
+   * @param helper The helper delegatecalled for the pool swap of the zap again; the zero address
+   * disables the zap again
    */
   struct ZapInParams {
     address vault;
@@ -53,7 +35,7 @@ interface IZapArrakisV2Settler is IZapSettler, IZapArrakisV2HelperTypes {
     uint128 minShares;
     address recipient;
     address refundRecipient;
-    ZapAgainParams zapAgain;
+    address helper;
   }
 
   /**

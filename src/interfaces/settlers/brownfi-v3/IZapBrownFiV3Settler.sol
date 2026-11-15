@@ -4,8 +4,6 @@ pragma solidity ^0.8.0;
 import {IZapSettler} from '../IZapSettler.sol';
 import {IZapBrownFiV3HelperTypes} from './IZapBrownFiV3HelperTypes.sol';
 
-import {PackedU128} from '../../../types/PackedU128.sol';
-
 /// @title IZapBrownFiV3Settler
 /// @notice Interface of {ZapBrownFiV3Settler}
 interface IZapBrownFiV3Settler is IZapSettler, IZapBrownFiV3HelperTypes {
@@ -15,20 +13,16 @@ interface IZapBrownFiV3Settler is IZapSettler, IZapBrownFiV3HelperTypes {
   /**
    * @notice Parameters of the zap in
    * @param pool The pair to add liquidity to
-   * @param iterations The number of binary-search iterations of the swap preview
-   * @param helper The helper queried for the amounts of each mint and delegatecalled for the pool
-   * swap of the zap again
-   * @param minZapInAmounts The remaining amounts of token0 and token1 from which the zap again runs;
-   * it runs when either remaining amount is at least its minimum
+   * @param helper The helper queried for the amounts of the first mint when the pool swap recorded
+   * none, and delegatecalled for the pool swap of the zap again; the zap again does not run when it
+   * is the zero address
    * @param minLiquidity The minimum liquidity to add
    * @param recipient The receiver of the liquidity tokens
    * @param refundRecipient The receiver of the remaining tokens
    */
   struct ZapInParams {
     address pool;
-    uint256 iterations;
     address helper;
-    PackedU128 minZapInAmounts;
     uint128 minLiquidity;
     address recipient;
     address refundRecipient;

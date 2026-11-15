@@ -2,7 +2,8 @@
 pragma solidity ^0.8.0;
 
 /// @title IZapPoolSwapHelper
-/// @notice Interface of the helper a settler delegatecalls for the pool swap of a zap again
+/// @notice Interface of the helper that the executor of a solver call delegatecalls for the pool
+/// swap of a zap in
 interface IZapPoolSwapHelper {
   /// @param poolSwapLogData ABI-encoded result of the pool swap
   event PoolSwap(bytes poolSwapLogData);
