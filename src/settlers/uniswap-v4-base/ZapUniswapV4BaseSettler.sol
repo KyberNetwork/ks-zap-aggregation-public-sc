@@ -11,10 +11,11 @@ import {ImmutableState} from '../../base/ImmutableState.sol';
 import {ZapAgainHelperCaller} from '../../base/ZapAgainHelperCaller.sol';
 import {CommonLibrary} from '../../libraries/CommonLibrary.sol';
 import {ZapAgainRecord} from '../../libraries/ZapAgainRecord.sol';
-import {UniswapV3MintLibrary} from '../../libraries/uniswap-v3/UniswapV3MintLibrary.sol';
 import {Actions} from '../../vendors/uniswap-v4/Actions.sol';
 import {IPoolManager} from '../../vendors/uniswap-v4/IPoolManager.sol';
 import {IPositionManager} from '../../vendors/uniswap-v4/IPositionManager.sol';
+import {LiquidityAmounts} from '../../vendors/uniswap-v4/LiquidityAmounts.sol';
+import {SqrtPriceMath} from '../../vendors/uniswap-v4/SqrtPriceMath.sol';
 import {StateLibrary} from '../../vendors/uniswap-v4/StateLibrary.sol';
 import {TickMath} from '../../vendors/uniswap-v4/TickMath.sol';
 
@@ -369,8 +370,25 @@ contract ZapUniswapV4BaseSettler is IZapUniswapV4BaseSettler, ImmutableState, Za
   {
     (uint160 sqrtPriceX96,,,) = state.poolManager.getSlot0(state.poolId);
 
-    (liquidity, addedAmount0, addedAmount1) = UniswapV3MintLibrary.previewMint(
-      sqrtPriceX96, state.sqrtPriceLowerX96, state.sqrtPriceUpperX96, state.amount0, state.amount1
+    liquidity = uint128(
+      LiquidityAmounts.getLiquidityForAmounts(
+        sqrtPriceX96, state.sqrtPriceLowerX96, state.sqrtPriceUpperX96, state.amount0, state.amount1
+      )
     );
+
+    if (sqrtPriceX96 <= state.sqrtPriceLowerX96) {
+      addedAmount0 = SqrtPriceMath.getAmount0Delta(
+        state.sqrtPriceLowerX96, state.sqrtPriceUpperX96, liquidity, true
+      );
+    } else if (sqrtPriceX96 < state.sqrtPriceUpperX96) {
+      addedAmount0 =
+        SqrtPriceMath.getAmount0Delta(sqrtPriceX96, state.sqrtPriceUpperX96, liquidity, true);
+      addedAmount1 =
+        SqrtPriceMath.getAmount1Delta(state.sqrtPriceLowerX96, sqrtPriceX96, liquidity, true);
+    } else {
+      addedAmount1 = SqrtPriceMath.getAmount1Delta(
+        state.sqrtPriceLowerX96, state.sqrtPriceUpperX96, liquidity, true
+      );
+    }
   }
 }
