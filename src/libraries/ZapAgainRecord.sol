@@ -5,8 +5,8 @@ pragma solidity ^0.8.24;
 /// @notice Stores in transient storage the parameters of the zap again that the solver passes to a
 /// pool swap, for the settler of the owner call that follows
 /// @dev The record lives in the transient storage of the contract that runs the pool swap and the
-/// settler, the router. A pool swap writes or clears the record and the settler consumes it. A
-/// zero length means no record.
+/// settler, the router. A pool swap writes the record and the settler consumes it. A zero length
+/// means no record, so writing empty parameters clears the record.
 library ZapAgainRecord {
   /// @dev Transient slot of the byte length of the parameters, followed by the slots of the words
   /// of the parameters
@@ -14,7 +14,7 @@ library ZapAgainRecord {
 
   /**
    * @dev Stores the parameters, replacing the previous record
-   * @param params The ABI-encoded parameters of the zap again
+   * @param params The ABI-encoded parameters of the zap again, empty for no record
    */
   function write(bytes calldata params) internal {
     bytes32 slot = BASE_SLOT;
@@ -24,14 +24,6 @@ library ZapAgainRecord {
       for { let i := 0 } lt(i, words) { i := add(i, 1) } {
         tstore(add(slot, add(1, i)), calldataload(add(params.offset, shl(5, i))))
       }
-    }
-  }
-
-  /// @dev Clears the record
-  function clear() internal {
-    bytes32 slot = BASE_SLOT;
-    assembly ('memory-safe') {
-      tstore(slot, 0)
     }
   }
 
@@ -47,9 +39,8 @@ library ZapAgainRecord {
     }
     if (length == 0) return params;
 
-    clear();
-
     assembly ('memory-safe') {
+      tstore(slot, 0)
       let words := shr(5, add(length, 31))
       params := mload(0x40)
       mstore(params, length)
