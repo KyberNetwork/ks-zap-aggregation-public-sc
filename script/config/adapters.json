@@ -1,0 +1,22 @@
+{
+  "1": {
+    "FlashLoanAdapter": "0xD81E384641c84B85A723e360aA0876a486D10C2f",
+    "AaveV3ActionAdapter": "0xe5e59aEC9158e259512a03b949983b6Ae1Fa6504",
+    "MorphoActionAdapter": "0x01E7e6Bf646f555Eb2952244C37F51F0e0b7E935"
+  },
+  "8453": {
+    "FlashLoanAdapter": "0xD81E384641c84B85A723e360aA0876a486D10C2f",
+    "AaveV3ActionAdapter": "0xe5e59aEC9158e259512a03b949983b6Ae1Fa6504",
+    "MorphoActionAdapter": "0x01E7e6Bf646f555Eb2952244C37F51F0e0b7E935"
+  },
+  "56": {
+    "FlashLoanAdapter": "0xD81E384641c84B85A723e360aA0876a486D10C2f",
+    "AaveV3ActionAdapter": "0xe5e59aEC9158e259512a03b949983b6Ae1Fa6504",
+    "MorphoActionAdapter": "0x01E7e6Bf646f555Eb2952244C37F51F0e0b7E935"
+  },
+  "4663": {
+    "FlashLoanAdapter": "0xD81E384641c84B85A723e360aA0876a486D10C2f",
+    "AaveV3ActionAdapter": "0xe5e59aEC9158e259512a03b949983b6Ae1Fa6504",
+    "MorphoActionAdapter": "0x01E7e6Bf646f555Eb2952244C37F51F0e0b7E935"
+  }
+}
