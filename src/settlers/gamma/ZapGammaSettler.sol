@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.38;
+pragma solidity ^0.8.35;
 
 import {ZapArrakisV2Settler} from '../arrakis-v2/ZapArrakisV2Settler.sol';
 

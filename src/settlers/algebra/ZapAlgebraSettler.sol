@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.38;
+pragma solidity ^0.8.35;
 
 import {ZapUniswapV3Settler} from '../uniswap-v3/ZapUniswapV3Settler.sol';
 
