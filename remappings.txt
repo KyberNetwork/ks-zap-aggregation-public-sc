@@ -3,3 +3,4 @@ src/interfaces/ICreateX.sol=lib/ks-common-sc/src/interfaces/ICreateX.sol
 forge-std/=lib/ks-common-sc/lib/forge-std/src/
 ks-common-sc/=lib/ks-common-sc/
 openzeppelin-contracts/=lib/ks-common-sc/lib/openzeppelin-contracts/
+solady/=lib/solady/src/

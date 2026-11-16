@@ -1,19 +1,18 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
+pragma solidity ^0.8.35;
 
 /// @title AddLiquidityPreviewRecord
 /// @notice Stores in transient storage the add liquidity preview that a pool swap computes for the
 /// amounts after the swap
 /// @dev The record lives in the transient storage of the contract that runs the pool swap and the
-/// mint, the router. A pool swap writes the record and the next mint consumes it. A zero liquidity
+/// mint, the router. A pool swap stores the record and the next mint loads it. A zero liquidity
 /// means no record.
 library AddLiquidityPreviewRecord {
   /// @dev Transient slot of the liquidity, followed by the slots of the two added amounts
-  bytes32 private constant BASE_SLOT =
-    bytes32(uint256(keccak256('ks.zap.add-liquidity-preview-record')) - 1);
+  bytes32 private constant BASE_SLOT = bytes32(erc7201('ks.zap.add-liquidity-preview-record'));
 
   /// @dev Stores the preview, replacing the previous record
-  function write(uint256 liquidity, uint256 addedAmount0, uint256 addedAmount1) internal {
+  function store(uint256 liquidity, uint256 addedAmount0, uint256 addedAmount1) internal {
     bytes32 slot = BASE_SLOT;
     assembly ('memory-safe') {
       tstore(slot, liquidity)
@@ -28,10 +27,7 @@ library AddLiquidityPreviewRecord {
    * @return addedAmount0 The previewed amount of token0
    * @return addedAmount1 The previewed amount of token1
    */
-  function consume()
-    internal
-    returns (uint256 liquidity, uint256 addedAmount0, uint256 addedAmount1)
-  {
+  function load() internal returns (uint256 liquidity, uint256 addedAmount0, uint256 addedAmount1) {
     bytes32 slot = BASE_SLOT;
     assembly ('memory-safe') {
       liquidity := tload(slot)

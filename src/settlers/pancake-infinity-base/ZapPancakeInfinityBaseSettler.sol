@@ -132,7 +132,7 @@ contract ZapPancakeInfinityBaseSettler is
     zapInResult.originalAmount0 = state.amount0;
     zapInResult.originalAmount1 = state.amount1;
 
-    bytes memory zapAgainParams = ZapAgainRecord.consume();
+    bytes memory zapAgainParams = ZapAgainRecord.load();
 
     _addLiquidity(params, state, zapInResult);
 

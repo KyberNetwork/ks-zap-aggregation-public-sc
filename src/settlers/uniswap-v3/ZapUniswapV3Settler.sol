@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.38;
+pragma solidity ^0.8.35;
 
 import {IKSZapExecutor} from '../../interfaces/IKSZapExecutor.sol';
 import {IZapPoolSwapAgainHelper} from '../../interfaces/settlers/IZapPoolSwapAgainHelper.sol';
@@ -50,7 +50,7 @@ contract ZapUniswapV3Settler is IZapUniswapV3Settler, ImmutableState, ZapAgainHe
 
   /// @inheritdoc IKSZapExecutor
   function executeZap(bytes calldata data) external payable returns (bytes memory) {
-    bytes memory zapAgainParams = ZapAgainRecord.consume();
+    bytes memory zapAgainParams = ZapAgainRecord.load();
 
     ZapInParams calldata params;
     assembly ('memory-safe') {

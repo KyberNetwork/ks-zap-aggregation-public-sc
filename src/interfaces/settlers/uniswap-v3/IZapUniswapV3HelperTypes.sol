@@ -66,7 +66,7 @@ interface IZapUniswapV3HelperTypes {
    * @notice The variable parameters for the pool swap of a Uniswap V3 zap
    * @param extraData The off-chain data or the optimizer data
    * @param zapAgain ABI-encoded {UniswapV3ZapAgainParams} that the zap again of the settler reads
-   * from the record this pool swap writes; empty clears the record
+   * from the record this pool swap stores; empty clears the record
    */
   struct PoolSwapVariableParams {
     bytes extraData;

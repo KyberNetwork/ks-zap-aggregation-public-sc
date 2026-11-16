@@ -51,7 +51,7 @@ contract ZapSolidlyV2Settler is
       params := data.offset
     }
 
-    bytes memory zapAgainParams = ZapAgainRecord.consume();
+    bytes memory zapAgainParams = ZapAgainRecord.load();
 
     ZapInState memory state;
     state.token0 = ISolidlyV2Pair(params.pool).token0();
@@ -125,7 +125,7 @@ contract ZapSolidlyV2Settler is
     returns (PreviewAddLiquidityResult memory preview)
   {
     (preview.liquidity, preview.addedAmount0, preview.addedAmount1) =
-      AddLiquidityPreviewRecord.consume();
+      AddLiquidityPreviewRecord.load();
     if (preview.liquidity != 0) return preview;
 
     bytes memory fixedParams =

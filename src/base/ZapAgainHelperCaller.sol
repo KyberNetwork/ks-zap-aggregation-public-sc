@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.35;
 
 import {IZapPoolSwapAgainHelper} from '../interfaces/settlers/IZapPoolSwapAgainHelper.sol';
 import {MASK_BYTES_4} from '../libraries/BitMask.sol';
@@ -18,7 +18,7 @@ abstract contract ZapAgainHelperCaller {
 
   /// @dev Transient slot holding the helper of the ongoing pool swap
   bytes32 private constant ZAP_AGAIN_HELPER_SLOT =
-    bytes32(uint256(keccak256('ks.zap.settler.zap-again-helper')) - 1);
+    bytes32(erc7201('ks.zap.settler.zap-again-helper'));
 
   /// @dev Delegatecalls `poolSwapAgain` of the helper and returns its decoded result
   function _poolSwapAgain(address helper, bytes memory fixedParams, PackedU128 minZapInAmounts)
