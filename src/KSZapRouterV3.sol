@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
-import {IKSGenericRouter} from './interfaces/IKSGenericRouter.sol';
 import {IKSZapExecutor} from './interfaces/IKSZapExecutor.sol';
 import {IKSZapRouterV3} from './interfaces/IKSZapRouterV3.sol';
 
@@ -58,10 +57,7 @@ contract KSZapRouterV3 is
     return EXECUTOR_SLOT.asAddress().tload().functionDelegateCall(data);
   }
 
-  /**
-   * @inheritdoc IKSGenericRouter
-   * @dev `data` is the ABI-encoded `ZapParams` and the signer's signature of it
-   */
+  /// @inheritdoc IKSZapRouterV3
   function ksExecute(bytes calldata data)
     external
     payable
