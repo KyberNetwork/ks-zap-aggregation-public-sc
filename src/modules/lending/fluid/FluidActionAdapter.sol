@@ -129,7 +129,7 @@ contract FluidActionAdapter is ILendingActionAdapter {
     uint256 borrowAmount,
     address onBehalfOf
   ) internal {
-    uint256 msgValue;
+    uint256 msgValue = 0;
 
     if (supplyAmount > 0) {
       if (collateralToken.isNative()) {

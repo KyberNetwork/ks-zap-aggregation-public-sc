@@ -119,6 +119,8 @@ contract AaveV3ActionAdapter is ILendingActionAdapter {
     if (onBehalfOf != address(this)) {
       address aToken = IPool(pool).getReserveAToken(collateralToken);
       withdrawAmount = Math.min(withdrawAmount, aToken.balanceOf(onBehalfOf) - 1);
+      /// The tokens withdrawn belong to onBehalfOf, which is chosen by the caller of ksExecute.
+      // forge-lint: disable-next-line(arbitrary-send-erc20)
       aToken.safeTransferFrom(onBehalfOf, address(this), withdrawAmount + 1);
     }
     IPool(pool).withdraw(collateralToken, withdrawAmount, address(this));

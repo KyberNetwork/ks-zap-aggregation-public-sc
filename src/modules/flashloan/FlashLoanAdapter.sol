@@ -6,8 +6,6 @@ import {IFlashLoanAdapter} from '../../interfaces/modules/flashloan/IFlashLoanAd
 import {IFlashLoanReceiver} from '../../interfaces/modules/flashloan/IFlashLoanReceiver.sol';
 
 import {IPool} from '../../vendors/aave-v3/IPool.sol';
-import {IVault as IBalancerV2Vault} from '../../vendors/balancer-v2/IVault.sol';
-import {IVault as IBalancerV3Vault} from '../../vendors/balancer-v3/IVault.sol';
 import {IEVault} from '../../vendors/euler-v2/IEVault.sol';
 import {IMorpho} from '../../vendors/morpho/IMorpho.sol';
 import {ISafe} from '../../vendors/safe-smart-account/ISafe.sol';
@@ -52,10 +50,6 @@ contract FlashLoanAdapter is IFlashLoanAdapter, ImmutableState {
 
     if (source == FlashLoanSource.AAVE_V3) {
       _handleAaveV3(receiverType, flashLoanParams, data);
-    } else if (source == FlashLoanSource.BALANCER_V2) {
-      _handleBalancerV2(receiverType, flashLoanParams, data);
-    } else if (source == FlashLoanSource.BALANCER_V3) {
-      _handleBalancerV3(receiverType, flashLoanParams, data);
     } else if (source == FlashLoanSource.ERC3156) {
       _handleERC3156(receiverType, flashLoanParams, data);
     } else if (source == FlashLoanSource.MORPHO_BLUE) {
@@ -105,39 +99,6 @@ contract FlashLoanAdapter is IFlashLoanAdapter, ImmutableState {
         address(0),
         abi.encode(_packReceiveInfo(receiverType, msg.sender), data),
         0
-      );
-  }
-
-  function _handleBalancerV2(
-    ReceiverType receiverType,
-    bytes calldata flashLoanParams,
-    bytes calldata data
-  ) internal {
-    address vault = flashLoanParams.decodeAddress(0);
-    address[] calldata tokens = flashLoanParams.decodeAddressArray(1);
-    uint256[] calldata amounts = flashLoanParams.decodeUint256Array(2);
-
-    IBalancerV2Vault(vault)
-      .flashLoan(
-        address(this), tokens, amounts, abi.encode(_packReceiveInfo(receiverType, msg.sender), data)
-      );
-  }
-
-  function _handleBalancerV3(
-    ReceiverType receiverType,
-    bytes calldata flashLoanParams,
-    bytes calldata data
-  ) internal {
-    address vault = flashLoanParams.decodeAddress(0);
-    address[] calldata tokens = flashLoanParams.decodeAddressArray(1);
-    uint256[] calldata amounts = flashLoanParams.decodeUint256Array(2);
-
-    IBalancerV3Vault(vault)
-      .unlock(
-        abi.encodeCall(
-          this.balancerV3Callback,
-          (_packReceiveInfo(receiverType, msg.sender), tokens, amounts, data)
-        )
       );
   }
 
@@ -258,47 +219,6 @@ contract FlashLoanAdapter is IFlashLoanAdapter, ImmutableState {
     _receiveFlashLoan(receiverType, receiver, assets, payAmounts, data);
 
     return true;
-  }
-
-  /// @dev Balancer V2 flash loan callback
-  function receiveFlashLoan(
-    address[] calldata tokens,
-    uint256[] calldata amounts,
-    uint256[] calldata feeAmounts,
-    bytes calldata callbackData
-  ) external {
-    (ReceiverType receiverType, address receiver) =
-      _unpackReceiverInfo(callbackData.decodeUint256(0));
-    bytes calldata data = callbackData.decodeBytes(1);
-
-    for (uint256 i = 0; i < tokens.length; i++) {
-      tokens[i].safeTransfer(receiver, amounts[i]);
-    }
-
-    uint256[] memory payAmounts = _computePayAmounts(amounts, feeAmounts);
-    _receiveFlashLoan(receiverType, receiver, tokens, payAmounts, data);
-
-    _transferTokens(tokens, payAmounts, msg.sender);
-  }
-
-  /// @dev Balancer V3 flash loan callback
-  function balancerV3Callback(
-    uint256 receiverInfo,
-    address[] calldata tokens,
-    uint256[] calldata amounts,
-    bytes calldata data
-  ) external {
-    (ReceiverType receiverType, address receiver) = _unpackReceiverInfo(receiverInfo);
-    for (uint256 i = 0; i < tokens.length; i++) {
-      IBalancerV3Vault(msg.sender).sendTo(tokens[i], receiver, amounts[i]);
-    }
-
-    _receiveFlashLoan(receiverType, receiver, tokens, amounts, data);
-
-    _transferTokens(tokens, amounts, msg.sender);
-    for (uint256 i = 0; i < tokens.length; i++) {
-      IBalancerV3Vault(msg.sender).settle(tokens[i], amounts[i]);
-    }
   }
 
   /// @dev ERC3156 flash loan callback
