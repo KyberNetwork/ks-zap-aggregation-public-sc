@@ -4,3 +4,7 @@
 [submodule "lib/solady"]
 	path = lib/solady
 	url = https://github.com/Vectorized/solady
+[submodule "lib/ks-allowance-hub"]
+	path = lib/ks-allowance-hub
+	url = https://github.com/KyberNetwork/ks-allowance-hub
+	branch = v2
