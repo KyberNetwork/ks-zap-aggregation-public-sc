@@ -3,7 +3,7 @@ pragma solidity ^0.8.0;
 
 import {
   IZapAddLiquidityPreviewHelper
-} from '../interfaces/settlers/IZapAddLiquidityPreviewHelper.sol';
+} from '../interfaces/adapters/IZapAddLiquidityPreviewHelper.sol';
 
 import {Address} from 'openzeppelin-contracts/contracts/utils/Address.sol';
 

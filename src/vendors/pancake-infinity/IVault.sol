@@ -47,7 +47,7 @@ interface IVault {
 
   /// @notice Get the current delta for a locker in the given currency
   /// @param currency The currency for which to lookup the delta
-  function currencyDelta(address settler, address currency) external view returns (int256);
+  function currencyDelta(address adapter, address currency) external view returns (int256);
 
   /// @notice All operations go through this function
   /// @param data Any data to pass to the callback, via `ILockCallback(msg.sender).lockCallback(data)`
@@ -59,19 +59,19 @@ interface IVault {
   /// @param currency0 The PoolKey currency0 to update
   /// @param currency1 The PoolKey currency1 to update
   /// @param delta The change in the pool's balance
-  /// @param settler The address whose delta will be updated
+  /// @param adapter The address whose delta will be updated
   function accountAppBalanceDelta(
     address currency0,
     address currency1,
     BalanceDelta delta,
-    address settler
+    address adapter
   ) external;
 
   /// @notice This works as a general accounting mechanism for non-dex app
   /// @param currency The currency to update
   /// @param delta The change in the balance
-  /// @param settler The address whose delta will be updated
-  function accountAppBalanceDelta(address currency, int128 delta, address settler) external;
+  /// @param adapter The address whose delta will be updated
+  function accountAppBalanceDelta(address currency, int128 delta, address adapter) external;
 
   /// @notice Called by the user to net out some value owed to the user
   /// @dev Can also be used as a mechanism for _free_ flash loans

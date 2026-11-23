@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.35;
 
-import {IZapPoolSwapAgainHelper} from '../interfaces/settlers/IZapPoolSwapAgainHelper.sol';
+import {IZapPoolSwapAgainHelper} from '../interfaces/adapters/IZapPoolSwapAgainHelper.sol';
 import {MASK_BYTES_4} from '../libraries/BitMask.sol';
 import {PackedU128} from '../types/PackedU128.sol';
 
@@ -18,7 +18,7 @@ abstract contract ZapAgainHelperCaller {
 
   /// @dev Transient slot holding the helper of the ongoing pool swap
   bytes32 private constant ZAP_AGAIN_HELPER_SLOT =
-    bytes32(erc7201('ks.zap.settler.zap-again-helper'));
+    bytes32(erc7201('ks.zap.adapter.zap-again-helper'));
 
   /// @dev Delegatecalls `poolSwapAgain` of the helper and returns its decoded result
   function _poolSwapAgain(address helper, bytes memory fixedParams, PackedU128 minZapInAmounts)

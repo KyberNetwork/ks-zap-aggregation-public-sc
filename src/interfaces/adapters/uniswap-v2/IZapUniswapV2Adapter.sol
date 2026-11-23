@@ -1,0 +1,60 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import {IZapAdapter} from '../IZapAdapter.sol';
+import {IZapUniswapV2HelperTypes} from './IZapUniswapV2HelperTypes.sol';
+
+/// @title IZapUniswapV2Adapter
+/// @notice Interface of {ZapUniswapV2Adapter}
+interface IZapUniswapV2Adapter is IZapAdapter, IZapUniswapV2HelperTypes {
+  /// @notice Thrown when the added liquidity is below the minimum
+  error ZapInUniswapV2InsufficientLiquidity();
+
+  /**
+   * @notice Parameters of the zap in
+   * @param pool The pair to add liquidity to
+   * @param helper The helper queried for the amounts of the first mint when the pool swap recorded
+   * none, and delegatecalled for the pool swap of the zap again; the zap again does not run when it
+   * is the zero address
+   * @param swapFee The swap fee of the first mint preview
+   * @param protocolFee The protocol fee of the first mint preview
+   * @param feeDenominator The fee denominator of the first mint preview
+   * @param minLiquidity The minimum liquidity to add
+   * @param recipient The receiver of the liquidity tokens
+   * @param refundRecipient The receiver of the remaining tokens
+   */
+  struct ZapInParams {
+    address pool;
+    address helper;
+    uint24 swapFee;
+    uint24 protocolFee;
+    uint24 feeDenominator;
+    uint256 minLiquidity;
+    address recipient;
+    address refundRecipient;
+  }
+
+  /**
+   * @notice Result of the zap in
+   * @param pool The pair that received the liquidity
+   * @param recipient The receiver of the liquidity tokens
+   * @param originalAmount0 The amount of token0 held before adding liquidity
+   * @param originalAmount1 The amount of token1 held before adding liquidity
+   * @param liquidity The liquidity added
+   * @param addedAmount0 The amount of token0 added
+   * @param addedAmount1 The amount of token1 added
+   * @param remainingAmount0 The amount of token0 transferred to the refund recipient
+   * @param remainingAmount1 The amount of token1 transferred to the refund recipient
+   */
+  struct ZapInResult {
+    address pool;
+    address recipient;
+    uint256 originalAmount0;
+    uint256 originalAmount1;
+    uint256 liquidity;
+    uint256 addedAmount0;
+    uint256 addedAmount1;
+    uint256 remainingAmount0;
+    uint256 remainingAmount1;
+  }
+}

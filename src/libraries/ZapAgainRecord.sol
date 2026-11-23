@@ -5,9 +5,9 @@ import {LibTransient} from 'solady/utils/LibTransient.sol';
 
 /// @title ZapAgainRecord
 /// @notice Stores in transient storage the parameters of the zap again that the solver passes to a
-/// pool swap, for the settler of the owner call that follows
+/// pool swap, for the adapter of the owner call that follows
 /// @dev The record lives in the transient storage of the contract that runs the pool swap and the
-/// settler, the router. A pool swap stores the record and the settler loads it. Empty parameters
+/// adapter, the router. A pool swap stores the record and the adapter loads it. Empty parameters
 /// mean no record.
 library ZapAgainRecord {
   using LibTransient for LibTransient.TBytes;
