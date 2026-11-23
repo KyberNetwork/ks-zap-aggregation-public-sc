@@ -13,6 +13,7 @@ import {CommonLibrary} from '../../libraries/CommonLibrary.sol';
 import {ZapAgainRecord} from '../../libraries/ZapAgainRecord.sol';
 import {ISolidlyV2Pair} from '../../vendors/solidly-v2/ISolidlyV2Pair.sol';
 
+import {IAHV2Callee} from 'ks-allowance-hub/src/interfaces/base/IAHV2Callee.sol';
 import {TokenHelper} from 'ks-common-sc/src/libraries/token/TokenHelper.sol';
 
 /// @title ZapSolidlyV2Settler
@@ -46,6 +47,23 @@ contract ZapSolidlyV2Settler is
 
   /// @inheritdoc IKSZapExecutor
   function executeZap(bytes calldata data) external payable returns (bytes memory) {
+    return _executeZap(data);
+  }
+
+  /**
+   * @inheritdoc IAHV2Callee
+   * @dev `solverData` is ignored
+   */
+  function execute(bytes calldata ownerData, bytes calldata)
+    external
+    payable
+    returns (bytes memory)
+  {
+    return _executeZap(ownerData);
+  }
+
+  /// @dev Adds liquidity as described by `data`
+  function _executeZap(bytes calldata data) internal returns (bytes memory) {
     ZapInParams calldata params;
     assembly ('memory-safe') {
       params := data.offset

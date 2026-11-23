@@ -12,6 +12,7 @@ import {ZapAgainRecord} from '../../libraries/ZapAgainRecord.sol';
 import {IArrakisV2Router} from '../../vendors/arrakis-v2/IArrakisV2Router.sol';
 import {IUniswapV3Pool} from '../../vendors/uniswap-v3/IUniswapV3Pool.sol';
 
+import {IAHV2Callee} from 'ks-allowance-hub/src/interfaces/base/IAHV2Callee.sol';
 import {TokenHelper} from 'ks-common-sc/src/libraries/token/TokenHelper.sol';
 
 /// @title ZapArrakisV2Settler
@@ -43,6 +44,23 @@ contract ZapArrakisV2Settler is IZapArrakisV2Settler, ImmutableState, ZapAgainHe
 
   /// @inheritdoc IKSZapExecutor
   function executeZap(bytes calldata data) external payable returns (bytes memory) {
+    return _executeZap(data);
+  }
+
+  /**
+   * @inheritdoc IAHV2Callee
+   * @dev `solverData` is ignored
+   */
+  function execute(bytes calldata ownerData, bytes calldata)
+    external
+    payable
+    returns (bytes memory)
+  {
+    return _executeZap(ownerData);
+  }
+
+  /// @dev Adds liquidity as described by `data`
+  function _executeZap(bytes calldata data) internal returns (bytes memory) {
     bytes memory zapAgainParams = ZapAgainRecord.load();
 
     ZapInParams calldata params;

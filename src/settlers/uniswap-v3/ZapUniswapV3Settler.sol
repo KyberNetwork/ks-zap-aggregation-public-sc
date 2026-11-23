@@ -14,6 +14,7 @@ import {IUniswapV3Pool} from '../../vendors/uniswap-v3/IUniswapV3Pool.sol';
 import {LiquidityAmounts} from '../../vendors/uniswap-v4/LiquidityAmounts.sol';
 import {TickMath} from '../../vendors/uniswap-v4/TickMath.sol';
 
+import {IAHV2Callee} from 'ks-allowance-hub/src/interfaces/base/IAHV2Callee.sol';
 import {TokenHelper} from 'ks-common-sc/src/libraries/token/TokenHelper.sol';
 
 import {IERC721} from 'openzeppelin-contracts/contracts/token/ERC721/IERC721.sol';
@@ -50,6 +51,23 @@ contract ZapUniswapV3Settler is IZapUniswapV3Settler, ImmutableState, ZapAgainHe
 
   /// @inheritdoc IKSZapExecutor
   function executeZap(bytes calldata data) external payable returns (bytes memory) {
+    return _executeZap(data);
+  }
+
+  /**
+   * @inheritdoc IAHV2Callee
+   * @dev `solverData` is ignored
+   */
+  function execute(bytes calldata ownerData, bytes calldata)
+    external
+    payable
+    returns (bytes memory)
+  {
+    return _executeZap(ownerData);
+  }
+
+  /// @dev Adds liquidity as described by `data`
+  function _executeZap(bytes calldata data) internal returns (bytes memory) {
     bytes memory zapAgainParams = ZapAgainRecord.load();
 
     ZapInParams calldata params;
