@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {ILendingActionAdapter} from '../../../interfaces/modules/lending/ILendingActionAdapter.sol';
+import {ILendingActionAdapter} from '../../../interfaces/adapters/lending/ILendingActionAdapter.sol';
 import {CommonLibrary} from '../../../libraries/CommonLibrary.sol';
 import {BoolAddress} from '../../../types/BoolAddress.sol';
 
