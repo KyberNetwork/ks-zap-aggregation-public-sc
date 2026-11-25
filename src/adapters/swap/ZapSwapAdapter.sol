@@ -60,8 +60,10 @@ contract ZapSwapAdapter is IZapSwapAdapter {
       tokenParams.expectedAmounts.length == tokenParams.swapData.length, MismatchedArrayLengths()
     );
 
-    if (tokenParams.token.boolValue()) {
-      tokenParams.token.addressValue().forceApprove(swapTarget, type(uint256).max);
+    address token = tokenParams.token.addressValue();
+    bool approvalFlag = tokenParams.token.boolValue();
+    if (approvalFlag) {
+      token.forceApprove(swapTarget, type(uint256).max);
     }
 
     uint256 expectedBalance = tokenParams.expectedBalance;

@@ -154,7 +154,7 @@ contract ZapUniswapV2Adapter is
         feeDenominator: params.feeDenominator,
         readBalanceFlag: false,
         optimizer: address(0),
-        optimizeFixedParams: ''
+        optimizeSolverParams: ''
       })
     );
     bytes memory variableParams =
@@ -182,7 +182,7 @@ contract ZapUniswapV2Adapter is
         feeDenominator: again.feeDenominator,
         readBalanceFlag: again.readBalanceFlag,
         optimizer: again.optimizer,
-        optimizeFixedParams: again.optimizeFixedParams
+        optimizeSolverParams: again.optimizeSolverParams
       })
     );
 

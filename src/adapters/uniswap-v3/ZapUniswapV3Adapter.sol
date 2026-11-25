@@ -10,11 +10,8 @@ import {LiquidityAction} from '../../types/LiquidityAction.sol';
 import {PackedU128} from '../../types/PackedU128.sol';
 import {IUniswapV3NFT} from '../../vendors/uniswap-v3/IUniswapV3NFT.sol';
 import {IUniswapV3Pool} from '../../vendors/uniswap-v3/IUniswapV3Pool.sol';
-import {LiquidityAmounts} from '../../vendors/uniswap-v4/LiquidityAmounts.sol';
-import {TickMath} from '../../vendors/uniswap-v4/TickMath.sol';
 
 import {IAHV2Callee} from 'ks-allowance-hub/src/interfaces/base/IAHV2Callee.sol';
-import {CalldataDecoder} from 'ks-common-sc/src/libraries/calldata/CalldataDecoder.sol';
 import {TokenHelper} from 'ks-common-sc/src/libraries/token/TokenHelper.sol';
 
 import {IERC721} from 'openzeppelin-contracts/contracts/token/ERC721/IERC721.sol';
@@ -24,19 +21,23 @@ import {IERC721} from 'openzeppelin-contracts/contracts/token/ERC721/IERC721.sol
  * @notice Adds liquidity to a Uniswap V3 position with the token balances of the account that
  * delegatecalls it, or removes liquidity from a position that account holds
  * @dev AHV2ProxyCallee delegatecalls the adapter, so the balances and the positions are those of
- * the proxy. Adding liquidity runs up to two passes. The first pass swaps with the helper of the
- * solver when the helper is set and `poolSwap.iterations` is not zero, and adds the resulting
- * amounts; otherwise it adds the token balances. It reverts with
+ * the proxy. Adding liquidity runs up to two passes, and both call `poolSwap` of the helper of
+ * the solver with the same `poolSwap` parameters; the helper is required. The first pass calls the
+ * helper with the token balances less 1 wei and the extra data, and adds the amounts and the
+ * liquidity that the helper returns. The helper swaps when `poolSwap.iterations` is not zero;
+ * otherwise it returns the amounts unchanged. The first pass reverts with
  * `ZapInUniswapV3InsufficientLiquidity` when it adds no liquidity. The second pass runs only when
- * the helper is set and the leftover of token0 or token1 is at least its value in
- * `minZapInAmounts`; it swaps with `poolSwapAgain` and skips its addition when the liquidity to
- * add is zero. 1 wei of each token is kept when adding liquidity, and the leftover balances stay in
- * the proxy. The fallback forwards the swap callbacks of the pool swaps to the helper.
+ * `poolSwap.iterations` is not zero and the leftover of token0 or token1 is at least its value in
+ * `minZapInAmounts`; it calls the helper with the leftover balances less 1 wei and without the
+ * extra data, and skips its addition when the liquidity to add is zero. `minLiquidity` is
+ * checked on the liquidity added by both passes. 1 wei of each token is kept when adding
+ * liquidity, and the leftover balances stay in the proxy. The helper is recorded in a transient
+ * slot before the first pool swap and cleared after the second pass, and the fallback forwards
+ * the swap callbacks of the pools to the recorded helper.
  */
 contract ZapUniswapV3Adapter is IZapUniswapV3Adapter, ImmutableState, ZapHelperCaller {
   using TokenHelper for address;
   using CommonLibrary for *;
-  using CalldataDecoder for bytes;
 
   /// @dev Tokens, amounts to add and position of a zap in
   struct ZapInState {
@@ -60,19 +61,21 @@ contract ZapUniswapV3Adapter is IZapUniswapV3Adapter, ImmutableState, ZapHelperC
 
   /**
    * @inheritdoc IAHV2Callee
-   * @dev `ownerData` is `abi.encode(LiquidityAction action, bytes actionParams)`. For
+   * @dev `ownerData` is `abi.encodePacked(LiquidityAction action, bytes actionParams)`: the
+   * first byte is the action and the remaining bytes are the action parameters. For
    * `ADD_LIQUIDITY`, `actionParams` is `abi.encode(ZapInOwnerParams)` and `solverData` is the
    * required `abi.encode(ZapInSolverParams)`. For `REMOVE_LIQUIDITY`, `actionParams` is
    * `abi.encode(RemoveOwnerParams)` and `solverData` is either empty, which sets the minimum
-   * amounts to zero, or `abi.encode(RemoveSolverParams)`.
+   * amounts to zero, or `abi.encode(RemoveSolverParams)`. An invalid action byte reverts with the
+   * panic code 0x21.
    */
   function execute(bytes calldata ownerData, bytes calldata solverData)
     external
     payable
     returns (bytes memory)
   {
-    LiquidityAction action = LiquidityAction(ownerData.decodeUint256(0));
-    bytes calldata actionParams = ownerData.decodeBytes(1);
+    LiquidityAction action = LiquidityAction(uint8(ownerData[0]));
+    bytes calldata actionParams = ownerData[1:];
 
     if (action == LiquidityAction.ADD_LIQUIDITY) {
       return _zapIn(actionParams, solverData);
@@ -107,20 +110,18 @@ contract ZapUniswapV3Adapter is IZapUniswapV3Adapter, ImmutableState, ZapHelperC
     zapInResult.originalAmount0 = state.token0.selfBalanceMinusOne();
     zapInResult.originalAmount1 = state.token1.selfBalanceMinusOne();
 
-    uint256 liquidityToAdd;
-    if (solverParams.helper != address(0) && solverParams.poolSwap.iterations != 0) {
-      liquidityToAdd = _poolSwap(params, state, solverParams.helper, solverParams.poolSwap);
-    } else {
-      state.amount0 = zapInResult.originalAmount0;
-      state.amount1 = zapInResult.originalAmount1;
-      liquidityToAdd = LiquidityAmounts.getLiquidityForAmounts(
-        _getSqrtPriceX96(params.pool),
-        TickMath.getSqrtPriceAtTick(params.tickLower),
-        TickMath.getSqrtPriceAtTick(params.tickUpper),
-        state.amount0,
-        state.amount1
-      );
-    }
+    _setHelper(solverParams.helper);
+    uint128 liquidityToAdd = _poolSwap(
+      data,
+      solverData,
+      solverParams.helper,
+      state,
+      PoolSwapAdditionalParams({
+        amount0: zapInResult.originalAmount0,
+        amount1: zapInResult.originalAmount1,
+        useExtraData: true
+      })
+    );
 
     require(liquidityToAdd != 0, ZapInUniswapV3InsufficientLiquidity());
 
@@ -132,13 +133,25 @@ contract ZapUniswapV3Adapter is IZapUniswapV3Adapter, ImmutableState, ZapHelperC
     }
     _modifyPosition(params, state, zapInResult);
 
-    if (solverParams.helper != address(0) && _reachesMinimums(state, solverParams.minZapInAmounts))
-    {
-      liquidityToAdd = _poolSwap(params, state, solverParams.helper, solverParams.poolSwapAgain);
+    if (
+      solverParams.poolSwap.iterations != 0 && _reachesMinimums(state, solverParams.minZapInAmounts)
+    ) {
+      liquidityToAdd = _poolSwap(
+        data,
+        solverData,
+        solverParams.helper,
+        state,
+        PoolSwapAdditionalParams({
+          amount0: state.token0.selfBalanceMinusOne(),
+          amount1: state.token1.selfBalanceMinusOne(),
+          useExtraData: false
+        })
+      );
       if (liquidityToAdd != 0) {
         _modifyPosition(params, state, zapInResult);
       }
     }
+    _clearHelper();
 
     require(
       zapInResult.addedLiquidity >= params.minLiquidity, ZapInUniswapV3InsufficientLiquidity()
@@ -169,31 +182,18 @@ contract ZapUniswapV3Adapter is IZapUniswapV3Adapter, ImmutableState, ZapHelperC
       || state.token1.selfBalanceMinusOne() >= minZapInAmounts.value1();
   }
 
-  /// @dev Swaps the balances through the helper towards the ratio of the position, as described by
-  /// `poolSwapParams`, records the amounts to add in `state` and returns the liquidity they add
+  /// @dev Calls `helper` with the amounts in `additionalParams`, records the amounts to add that
+  /// it returns in `state` and returns the liquidity they add
   function _poolSwap(
-    ZapInOwnerParams calldata params,
-    ZapInState memory state,
+    bytes calldata ownerData,
+    bytes calldata solverData,
     address helper,
-    UniswapV3PoolSwapParams calldata poolSwapParams
-  ) internal returns (uint256 liquidityToAdd) {
-    bytes memory fixedParams = abi.encode(
-      ZapInFixedParams({
-        posManager: params.posManager,
-        pool: params.pool,
-        tickLower: params.tickLower,
-        tickUpper: params.tickUpper,
-        sqrtPriceLimit0X96: poolSwapParams.sqrtPriceLimit0X96,
-        sqrtPriceLimit1X96: poolSwapParams.sqrtPriceLimit1X96,
-        iterations: poolSwapParams.iterations,
-        optimizer: poolSwapParams.optimizer,
-        optimizeFixedParams: poolSwapParams.optimizeFixedParams
-      })
-    );
-    bytes memory variableParams =
-      abi.encode(PoolSwapVariableParams({extraData: poolSwapParams.extraData}));
+    ZapInState memory state,
+    PoolSwapAdditionalParams memory additionalParams
+  ) internal returns (uint128 liquidityToAdd) {
+    bytes memory additionalData = abi.encode(additionalParams);
 
-    bytes memory returnData = _poolSwap(helper, fixedParams, variableParams);
+    bytes memory returnData = _poolSwap(helper, ownerData, solverData, additionalData);
     PoolSwapResult memory result = abi.decode(abi.decode(returnData, (bytes)), (PoolSwapResult));
 
     state.amount0 = result.amount0ToAdd;
@@ -241,11 +241,6 @@ contract ZapUniswapV3Adapter is IZapUniswapV3Adapter, ImmutableState, ZapHelperC
         })
       );
 
-    require(
-      amount0 >= minRemoveAmounts.value0() && amount1 >= minRemoveAmounts.value1(),
-      RemoveUniswapV3InsufficientAmounts()
-    );
-
     if (params.recipient != address(0)) {
       IERC721(params.posManager).transferFrom(address(this), params.recipient, params.tokenId);
     }
@@ -286,22 +281,6 @@ contract ZapUniswapV3Adapter is IZapUniswapV3Adapter, ImmutableState, ZapHelperC
       zapInResult.addedLiquidity += liquidity;
       zapInResult.addedAmount0 += addedAmount0;
       zapInResult.addedAmount1 += addedAmount1;
-    }
-  }
-
-  /// @dev Staticcalls the `slot0` getter of the pool and returns the first word of its return
-  /// data, the sqrt price. Reverts with the return data of the pool when the call fails or returns
-  /// less than one word.
-  function _getSqrtPriceX96(address pool) internal view virtual returns (uint160 sqrtPriceX96) {
-    bytes4 selector = IUniswapV3Pool.slot0.selector;
-    assembly ('memory-safe') {
-      mstore(0, selector)
-      let success := staticcall(gas(), pool, 0, 4, 0, 0x20)
-      if or(iszero(success), lt(returndatasize(), 0x20)) {
-        returndatacopy(0, 0, returndatasize())
-        revert(0, returndatasize())
-      }
-      sqrtPriceX96 := mload(0)
     }
   }
 

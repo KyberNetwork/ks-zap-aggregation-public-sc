@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.35;
 
+import {IZapLegacyPoolSwapHelper} from '../interfaces/adapters/IZapLegacyPoolSwapHelper.sol';
 import {IZapPoolSwapAgainHelper} from '../interfaces/adapters/IZapPoolSwapAgainHelper.sol';
 import {IZapPoolSwapHelper} from '../interfaces/adapters/IZapPoolSwapHelper.sol';
 import {MASK_BYTES_4} from '../libraries/BitMask.sol';
@@ -13,19 +14,49 @@ import {TransientSlot} from 'openzeppelin-contracts/contracts/utils/TransientSlo
 /// @notice Delegatecalls a helper to run a pool swap and forwards the callbacks of that swap to the
 /// helper
 /// @dev The helper runs in the context of this contract with its balances. The helper is recorded
-/// in a transient slot for the duration of the delegatecall so that callbacks of the pool reach it.
+/// in a transient slot so that callbacks of the pool reach it: an adapter whose pools call back
+/// sets it with `_setHelper` before its first pool swap and clears it with `_clearHelper` after
+/// its last one, and the calls to `IZapLegacyPoolSwapHelper` and `IZapPoolSwapAgainHelper` record
+/// it for the duration of each delegatecall.
 abstract contract ZapHelperCaller {
   using TransientSlot for *;
 
   /// @dev Transient slot holding the helper of the ongoing delegatecall
   bytes32 private constant HELPER_SLOT = bytes32(erc7201('ks.zap.adapter.helper'));
 
-  /// @dev Delegatecalls `poolSwap` of the helper and returns its result
+  /// @dev Records `helper` as the helper of the pool swaps that follow
+  function _setHelper(address helper) internal {
+    HELPER_SLOT.asAddress().tstore(helper);
+  }
+
+  /// @dev Clears the recorded helper
+  function _clearHelper() internal {
+    HELPER_SLOT.asAddress().tstore(address(0));
+  }
+
+  /// @dev Delegatecalls `poolSwap` of `helper` with the owner, solver and additional data and
+  /// returns its result, without recording the helper. Reverts when `helper` has no code.
+  function _poolSwap(
+    address helper,
+    bytes calldata ownerData,
+    bytes calldata solverData,
+    bytes memory additionalData
+  ) internal returns (bytes memory) {
+    bytes memory data = abi.encodeCall(
+      IZapPoolSwapHelper.poolSwap, (ownerData, solverData, additionalData)
+    );
+
+    return Address.functionDelegateCall(helper, data);
+  }
+
+  /// @dev Delegatecalls `poolSwap` of the helper with the fixed and variable parameters and
+  /// returns its result
   function _poolSwap(address helper, bytes memory fixedParams, bytes memory variableParams)
     internal
     returns (bytes memory)
   {
-    bytes memory data = abi.encodeCall(IZapPoolSwapHelper.poolSwap, (fixedParams, variableParams));
+    bytes memory data =
+      abi.encodeCall(IZapLegacyPoolSwapHelper.poolSwap, (fixedParams, variableParams));
 
     return _delegateToHelper(helper, data);
   }

@@ -20,7 +20,7 @@ interface IZapPancakeInfinityBaseHelperTypes {
    * @param swapHookData The data for the swap hook
    * @param addLiquidityHookData The data for the add liquidity hook
    * @param optimizer The optimizer address
-   * @param optimizeFixedParams The fixed parameters for the optimizer
+   * @param optimizeSolverParams The solver parameters for the optimizer
    * @param readBalanceFlag Whether to read the actual vault deltas and token balances,
    * used for fee-on-transfer or rebasing tokens
    */
@@ -36,7 +36,7 @@ interface IZapPancakeInfinityBaseHelperTypes {
     bytes swapHookData;
     bytes addLiquidityHookData;
     address optimizer;
-    bytes optimizeFixedParams;
+    bytes optimizeSolverParams;
     bool readBalanceFlag;
   }
 
@@ -92,7 +92,7 @@ interface IZapPancakeInfinityBaseHelperTypes {
    * @param iterations The number of iterations to binary search
    * @param swapHookData The data for the swap hook
    * @param optimizer The optimizer address
-   * @param optimizeFixedParams The fixed parameters for the optimizer
+   * @param optimizeSolverParams The solver parameters for the optimizer
    */
   struct PancakeInfinityZapAgainParams {
     PackedU128 minZapInAmounts;
@@ -101,7 +101,7 @@ interface IZapPancakeInfinityBaseHelperTypes {
     uint256 iterations;
     bytes swapHookData;
     address optimizer;
-    bytes optimizeFixedParams;
+    bytes optimizeSolverParams;
   }
 
   /**

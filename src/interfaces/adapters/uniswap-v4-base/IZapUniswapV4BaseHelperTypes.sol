@@ -1,53 +1,42 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {PackedU128} from '../../../types/PackedU128.sol';
 import {PoolKey} from '../../../vendors/uniswap-v4/PoolKey.sol';
 
 /// @title IZapUniswapV4BaseHelperTypes
-/// @notice Parameters and results of the Uniswap V4 base helper's zap in preview
+/// @notice Events, parameters and results of the Uniswap V4 helper
 interface IZapUniswapV4BaseHelperTypes {
   /**
-   * @notice The fixed parameters for zapping into Uniswap V4
-   * @param posManager The address of the position manager
-   * @param poolManager The address of the pool manager
-   * @param poolKey The pool key
-   * @param tickLower The lower tick
-   * @param tickUpper The upper tick
-   * @param sqrtPriceLimit0X96 The lower sqrt price limit
-   * @param sqrtPriceLimit1X96 The upper sqrt price limit
-   * @param iterations The number of iterations to binary search
-   * @param swapHookData The data for the swap hook
-   * @param addLiquidityHookData The data for the add liquidity hook
-   * @param optimizer The optimizer address
-   * @param optimizeFixedParams The fixed parameters for the optimizer
-   * @param readBalanceFlag Whether to read the actual pool manager deltas and token balances,
-   * used for fee-on-transfer or rebasing tokens
+   * @notice Emitted when the helper swaps on the pool towards the ratio of the position, or adds
+   * the amounts at the pool price when it swaps nothing
+   * @param originalAmount0 The amount of currency0 before the swap
+   * @param originalAmount1 The amount of currency1 before the swap
+   * @param usedOffchainData Whether the off-chain data was used
+   * @param liquidityToAdd The liquidity that the amounts to add give at the price after the swap
+   * @param amount0ToAdd The amount of currency0 to add to the position after the swap
+   * @param amount1ToAdd The amount of currency1 to add to the position after the swap
    */
-  struct ZapInFixedParams {
-    address posManager;
-    address poolManager;
-    PoolKey poolKey;
-    int24 tickLower;
-    int24 tickUpper;
-    uint160 sqrtPriceLimit0X96;
-    uint160 sqrtPriceLimit1X96;
-    uint256 iterations;
-    bytes swapHookData;
-    bytes addLiquidityHookData;
-    address optimizer;
-    bytes optimizeFixedParams;
-    bool readBalanceFlag;
-  }
+  event PoolSwap(
+    uint256 originalAmount0,
+    uint256 originalAmount1,
+    bool usedOffchainData,
+    uint128 liquidityToAdd,
+    uint256 amount0ToAdd,
+    uint256 amount1ToAdd
+  );
 
   /**
-   * @notice The variable parameters for previewing a zap into Uniswap V4
-   * @param amount0 The amount of token0 to zap in
-   * @param amount1 The amount of token1 to zap in
+   * @notice The parameters that the adapter adds to the pool swap and to the preview of a zap
+   * into Uniswap V4
+   * @param amount0 The amount of currency0 to swap and add
+   * @param amount1 The amount of currency1 to swap and add
+   * @param useExtraData Whether the pool swap uses the extra data of the solver; the preview
+   * ignores it
    */
-  struct PreviewZapInVariableParams {
+  struct PoolSwapAdditionalParams {
     uint256 amount0;
     uint256 amount1;
+    bool useExtraData;
   }
 
   /**
@@ -55,11 +44,11 @@ interface IZapUniswapV4BaseHelperTypes {
    * @param sqrtPriceStartX96 The starting sqrt price
    * @param poolLiquidityStart The starting pool liquidity
    * @param sqrtPriceX96 The resulting sqrt price
-   * @param amount0Delta The token0 delta for the swap
-   * @param amount1Delta The token1 delta for the swap
-   * @param positionLiquidity The amount of liquidity added
-   * @param addedAmount0 The amount of token0 added
-   * @param addedAmount1 The amount of token1 added
+   * @param amount0Delta The currency0 delta of the swap
+   * @param amount1Delta The currency1 delta of the swap
+   * @param positionLiquidity The liquidity added
+   * @param addedAmount0 The amount of currency0 added
+   * @param addedAmount1 The amount of currency1 added
    */
   struct PreviewZapInResult {
     uint160 sqrtPriceStartX96;
@@ -73,52 +62,16 @@ interface IZapUniswapV4BaseHelperTypes {
   }
 
   /**
-   * @notice The variable parameters for the pool swap of a Uniswap V4 zap
-   * @param extraData The off-chain data or the optimizer data
-   * @param zapAgain The ABI-encoded {UniswapV4ZapAgainParams} recorded for the zap again of the owner call,
-   * empty for no zap again
-   */
-  struct PoolSwapVariableParams {
-    bytes extraData;
-    bytes zapAgain;
-  }
-
-  /**
-   * @notice The parameters of the zap again that the solver chooses
-   * @param minZapInAmounts The remaining amounts of token0 and token1 from which the zap again
-   * swaps; it swaps when either remaining amount is at least its minimum
-   * @param sqrtPriceLimit0X96 The lower sqrt price limit
-   * @param sqrtPriceLimit1X96 The upper sqrt price limit
-   * @param iterations The number of iterations to binary search
-   * @param swapHookData The data for the swap hook
-   * @param optimizer The optimizer address
-   * @param optimizeFixedParams The fixed parameters for the optimizer
-   */
-  struct UniswapV4ZapAgainParams {
-    PackedU128 minZapInAmounts;
-    uint160 sqrtPriceLimit0X96;
-    uint160 sqrtPriceLimit1X96;
-    uint256 iterations;
-    bytes swapHookData;
-    address optimizer;
-    bytes optimizeFixedParams;
-  }
-
-  /**
    * @notice The result of the pool swap of a Uniswap V4 zap
-   * @param originalAmount0 The amount of token0 before the swap
-   * @param originalAmount1 The amount of token1 before the swap
    * @param usedOffchainData Whether the off-chain data was used
-   * @param positionLiquidity The expected liquidity of the position at the post-swap price
-   * @param amount0 The amount of token0 after the swap
-   * @param amount1 The amount of token1 after the swap
+   * @param liquidityToAdd The liquidity that the amounts to add give at the price after the swap
+   * @param amount0ToAdd The amount of currency0 to add to the position after the swap
+   * @param amount1ToAdd The amount of currency1 to add to the position after the swap
    */
   struct PoolSwapResult {
-    uint256 originalAmount0;
-    uint256 originalAmount1;
     bool usedOffchainData;
-    uint256 positionLiquidity;
-    uint256 amount0;
-    uint256 amount1;
+    uint128 liquidityToAdd;
+    uint256 amount0ToAdd;
+    uint256 amount1ToAdd;
   }
 }

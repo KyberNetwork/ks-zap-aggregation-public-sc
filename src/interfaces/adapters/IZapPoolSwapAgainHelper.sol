@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {IZapPoolSwapHelper} from './IZapPoolSwapHelper.sol';
+import {IZapLegacyPoolSwapHelper} from './IZapLegacyPoolSwapHelper.sol';
 
 import {PackedU128} from '../../types/PackedU128.sol';
 
 /// @title IZapPoolSwapAgainHelper
-/// @notice Interface of the helper that a adapter delegatecalls for the pool swap of a zap again
-interface IZapPoolSwapAgainHelper is IZapPoolSwapHelper {
+/// @notice Interface of the helper that an adapter delegatecalls for the pool swap of a zap again
+interface IZapPoolSwapAgainHelper is IZapLegacyPoolSwapHelper {
   /**
    * @notice Result of the pool swap of a zap again
    * @param swapped Whether a balance reached its minimum and the pool swap ran

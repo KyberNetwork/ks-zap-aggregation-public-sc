@@ -3,7 +3,6 @@ pragma solidity ^0.8.35;
 
 import {ZapUniswapV3Adapter} from '../uniswap-v3/ZapUniswapV3Adapter.sol';
 
-import {IAlgebraV1_9BasePool} from '../../vendors/algebra-v1.9/IAlgebraV1_9BasePool.sol';
 import {IAlgebraV1_9NFT} from '../../vendors/algebra-v1.9/IAlgebraV1_9NFT.sol';
 
 /// @title ZapAlgebraAdapter
@@ -13,28 +12,6 @@ import {IAlgebraV1_9NFT} from '../../vendors/algebra-v1.9/IAlgebraV1_9NFT.sol';
 contract ZapAlgebraAdapter is ZapUniswapV3Adapter {
   /// @param _WETH The wrapped native token
   constructor(address _WETH) ZapUniswapV3Adapter(_WETH) {}
-
-  /// @dev Staticcalls the `globalState` getter of the pool and returns the first word of its
-  /// return data, the sqrt price. Reverts with the return data of the pool when the call fails or
-  /// returns less than one word.
-  function _getSqrtPriceX96(address pool)
-    internal
-    view
-    virtual
-    override
-    returns (uint160 sqrtPriceX96)
-  {
-    bytes4 selector = IAlgebraV1_9BasePool.globalState.selector;
-    assembly ('memory-safe') {
-      mstore(0, selector)
-      let success := staticcall(gas(), pool, 0, 4, 0, 0x20)
-      if or(iszero(success), lt(returndatasize(), 0x20)) {
-        returndatacopy(0, 0, returndatasize())
-        revert(0, returndatasize())
-      }
-      sqrtPriceX96 := mload(0)
-    }
-  }
 
   /// @dev Mints a new position to the recipient with the amounts in `state`
   function _mint(ZapInOwnerParams calldata params, ZapInState memory state)

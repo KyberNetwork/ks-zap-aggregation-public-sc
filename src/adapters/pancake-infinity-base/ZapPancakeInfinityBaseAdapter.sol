@@ -337,7 +337,7 @@ contract ZapPancakeInfinityBaseAdapter is
         swapHookData: zapAgain.swapHookData,
         addLiquidityHookData: '',
         optimizer: zapAgain.optimizer,
-        optimizeFixedParams: zapAgain.optimizeFixedParams,
+        optimizeSolverParams: zapAgain.optimizeSolverParams,
         readBalanceFlag: params.readBalanceFlag
       })
     );

@@ -14,7 +14,7 @@ interface IZapUniswapV2HelperTypes {
    * @param feeDenominator The fee denominator
    * @param readBalanceFlag Whether to read the token balances, used for fee-on-transfer or rebasing tokens
    * @param optimizer The optimizer address
-   * @param optimizeFixedParams The fixed parameters for the optimizer
+   * @param optimizeSolverParams The solver parameters for the optimizer
    */
   struct ZapInFixedParams {
     address pool;
@@ -23,7 +23,7 @@ interface IZapUniswapV2HelperTypes {
     uint24 feeDenominator;
     bool readBalanceFlag;
     address optimizer;
-    bytes optimizeFixedParams;
+    bytes optimizeSolverParams;
   }
 
   /**
@@ -83,7 +83,7 @@ interface IZapUniswapV2HelperTypes {
    * @param feeDenominator The fee denominator
    * @param readBalanceFlag Whether to read the token balances, used for fee-on-transfer or rebasing tokens
    * @param optimizer The optimizer address
-   * @param optimizeFixedParams The fixed parameters for the optimizer
+   * @param optimizeSolverParams The solver parameters for the optimizer
    */
   struct ZapAgainParams {
     PackedU128 minZapInAmounts;
@@ -92,7 +92,7 @@ interface IZapUniswapV2HelperTypes {
     uint24 feeDenominator;
     bool readBalanceFlag;
     address optimizer;
-    bytes optimizeFixedParams;
+    bytes optimizeSolverParams;
   }
 
   /**

@@ -14,9 +14,6 @@ interface IZapUniswapV3Adapter is IZapAdapter, IZapUniswapV3HelperTypes {
   /// below `minLiquidity`
   error ZapInUniswapV3InsufficientLiquidity();
 
-  /// @notice Thrown when the removed amounts are below the minimums
-  error RemoveUniswapV3InsufficientAmounts();
-
   /**
    * @notice Parameters of the zap in, signed by the owner
    * @param posManager The position manager
@@ -42,18 +39,18 @@ interface IZapUniswapV3Adapter is IZapAdapter, IZapUniswapV3HelperTypes {
 
   /**
    * @notice Parameters of the zap in chosen by the solver
-   * @param poolSwap The pool swap of the first pass; zero `iterations` skips it
-   * @param poolSwapAgain The pool swap of the second pass
+   * @param poolSwap The pool swap of both passes; zero `iterations` skips both pool swaps: the
+   * first pass adds the balances at the pool price and the second pass does not run. The second
+   * pass uses the same parameters without `extraData`.
    * @param minZapInAmounts The minimum balances of token0 and token1 left after the first addition;
    * the second pass runs when either balance is at least its minimum
    * @param approvalFlags Bit 0 and bit 1 set approve the position manager for the maximum amount of
    * token0 and token1 respectively
-   * @param helper The helper that is delegatecalled for the pool swaps; the zero address skips both
-   * pool swaps and the second pass
+   * @param helper The helper that is delegatecalled for the pool swaps of both passes; it is
+   * required
    */
   struct ZapInSolverParams {
     UniswapV3PoolSwapParams poolSwap;
-    UniswapV3PoolSwapParams poolSwapAgain;
     PackedU128 minZapInAmounts;
     PackedBits approvalFlags;
     address helper;
@@ -63,10 +60,10 @@ interface IZapUniswapV3Adapter is IZapAdapter, IZapUniswapV3HelperTypes {
    * @notice Parameters of a pool swap before liquidity is added
    * @param sqrtPriceLimit0X96 The lower sqrt price limit
    * @param sqrtPriceLimit1X96 The upper sqrt price limit
-   * @param iterations The number of binary search iterations; zero skips the pool swap of the first
-   * pass only
+   * @param iterations The number of binary search iterations between initialized ticks; zero skips
+   * the pool swap
    * @param optimizer The optimizer address
-   * @param optimizeFixedParams The fixed parameters of the optimizer
+   * @param optimizeSolverParams The solver parameters of the optimizer
    * @param extraData The off-chain data or the data of the optimizer
    */
   struct UniswapV3PoolSwapParams {
@@ -74,7 +71,7 @@ interface IZapUniswapV3Adapter is IZapAdapter, IZapUniswapV3HelperTypes {
     uint160 sqrtPriceLimit1X96;
     uint256 iterations;
     address optimizer;
-    bytes optimizeFixedParams;
+    bytes optimizeSolverParams;
     bytes extraData;
   }
 
@@ -119,7 +116,9 @@ interface IZapUniswapV3Adapter is IZapAdapter, IZapUniswapV3HelperTypes {
 
   /**
    * @notice Parameters of the removal chosen by the solver
-   * @param minRemoveAmounts The minimum amounts of token0 and token1 that the removal collects
+   * @param minRemoveAmounts The minimum amounts of token0 and token1 that the decrease of
+   * liquidity returns, checked by the position manager on the principal without the fees; they
+   * are not checked when the liquidity to remove is zero
    */
   struct RemoveSolverParams {
     PackedU128 minRemoveAmounts;
