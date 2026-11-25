@@ -12,11 +12,6 @@ import {Address} from 'openzeppelin-contracts/contracts/utils/Address.sol';
 /**
  * @title ZapSwapAdapter
  * @notice Swaps the token balances of the account that delegatecalls it through a swap target
- * @dev `ownerData` is ignored. `solverData` is either empty, in which case nothing runs, or
- * `abi.encode(SwapSolverParams)`. The balances of all tokens are recorded before any swap runs.
- * No native value is sent to the swap target. The swap target is called through
- * {Address-functionCall}: a failed swap reverts with the revert data of the swap target, or with
- * {Errors-FailedCall} when there is none.
  */
 contract ZapSwapAdapter is IZapSwapAdapter {
   using TokenHelper for address;
@@ -24,7 +19,10 @@ contract ZapSwapAdapter is IZapSwapAdapter {
 
   /**
    * @inheritdoc IAHV2Callee
-   * @return An empty bytes
+   * @dev `ownerData` is ignored. `solverData` is either empty, in which case nothing runs, or
+   * `abi.encode(SwapSolverParams)`. A failed swap reverts with the revert data of the swap target,
+   * or with {Errors-FailedCall} when there is none.
+   * @return Empty bytes
    */
   function execute(bytes calldata, bytes calldata solverData)
     external
@@ -37,6 +35,7 @@ contract ZapSwapAdapter is IZapSwapAdapter {
 
     SwapSolverParams memory params = abi.decode(solverData, (SwapSolverParams));
 
+    // The balances of all tokens are recorded before any swap runs
     uint256[] memory currentBalances = new uint256[](params.tokens.length);
     for (uint256 i = 0; i < params.tokens.length; i++) {
       currentBalances[i] = params.tokens[i].token.addressValue().selfBalance();
@@ -92,6 +91,7 @@ contract ZapSwapAdapter is IZapSwapAdapter {
         scaledData = tokenParams.swapData[i];
       }
 
+      // No native value is sent to the swap target
       swapTarget.functionCall(scaledData);
 
       currentBalance -= scaledAmount;

@@ -1,37 +1,41 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.38;
 
-import {IKSZapExecutor} from '../../interfaces/IKSZapExecutor.sol';
-import {IZapPoolSwapAgainHelper} from '../../interfaces/adapters/IZapPoolSwapAgainHelper.sol';
 import {
   IZapPancakeInfinityBaseAdapter
 } from '../../interfaces/adapters/pancake-infinity-base/IZapPancakeInfinityBaseAdapter.sol';
+import {
+  IZapPancakeInfinityBaseHelper
+} from '../../interfaces/adapters/pancake-infinity-base/IZapPancakeInfinityBaseHelper.sol';
 
 import {ImmutableState} from '../../base/ImmutableState.sol';
 import {ZapHelperCaller} from '../../base/ZapHelperCaller.sol';
 import {CommonLibrary} from '../../libraries/CommonLibrary.sol';
-import {ZapAgainRecord} from '../../libraries/ZapAgainRecord.sol';
-
+import {LiquidityAction} from '../../types/LiquidityAction.sol';
+import {PackedU128} from '../../types/PackedU128.sol';
 import {Actions} from '../../vendors/pancake-infinity/Actions.sol';
 import {ICLPoolManager} from '../../vendors/pancake-infinity/ICLPoolManager.sol';
 import {ICLPositionManager} from '../../vendors/pancake-infinity/ICLPositionManager.sol';
 import {IVault} from '../../vendors/pancake-infinity/IVault.sol';
-
-import {LiquidityAmounts} from '../../vendors/uniswap-v4/LiquidityAmounts.sol';
+import {PoolKey} from '../../vendors/pancake-infinity/PoolKey.sol';
 import {SqrtPriceMath} from '../../vendors/uniswap-v4/SqrtPriceMath.sol';
 import {TickMath} from '../../vendors/uniswap-v4/TickMath.sol';
 
 import {IAHV2Callee} from 'ks-allowance-hub/src/interfaces/base/IAHV2Callee.sol';
 import {IAllowanceTransfer} from 'ks-common-sc/src/interfaces/IAllowanceTransfer.sol';
+import {CalldataDecoder} from 'ks-common-sc/src/libraries/calldata/CalldataDecoder.sol';
 import {TokenHelper} from 'ks-common-sc/src/libraries/token/TokenHelper.sol';
 
 import {IERC721} from 'openzeppelin-contracts/contracts/token/ERC721/IERC721.sol';
 
-/// @title ZapPancakeInfinityBaseAdapter
-/// @notice Adds liquidity to a Pancake Infinity CL position with the token balances this contract
-/// holds, when KSZapRouterV3 delegatecalls it in an owner call of an allowance hub fulfillment
-/// @dev The contract holds no tokens between transactions. 1 wei of each token is retained. A new
-/// position is minted to this contract and transferred to the recipient after the lock.
+/**
+ * @title ZapPancakeInfinityBaseAdapter
+ * @notice Adds liquidity to a Pancake Infinity CL position with the token balances of the account
+ * that delegatecalls it, or removes liquidity from a position that account holds
+ * @dev AHV2ProxyCallee delegatecalls the adapter, so the balances and the positions are those of
+ * the proxy. Adding liquidity runs inside one lock of the vault. The tokens are approved on the
+ * Permit2 contract set at construction.
+ */
 contract ZapPancakeInfinityBaseAdapter is
   IZapPancakeInfinityBaseAdapter,
   ImmutableState,
@@ -39,8 +43,9 @@ contract ZapPancakeInfinityBaseAdapter is
 {
   using TokenHelper for address;
   using CommonLibrary for *;
+  using CalldataDecoder for bytes;
 
-  /// @dev Pool, price bounds and amounts of a zap in
+  /// @dev Vault, pool, price bounds, position and amounts of a zap in
   struct ZapInState {
     IVault vault;
     ICLPoolManager clPoolManager;
@@ -52,33 +57,54 @@ contract ZapPancakeInfinityBaseAdapter is
     uint256 amount1;
   }
 
-  constructor(address _WETH) ImmutableState(_WETH) {}
+  /// @dev The Permit2 contract through which the position manager pulls the tokens
+  IAllowanceTransfer internal immutable PERMIT2;
+
+  /**
+   * @param _WETH The wrapped native token
+   * @param _permit2 The Permit2 contract of the chain
+   */
+  constructor(address _WETH, address _permit2) ImmutableState(_WETH) {
+    PERMIT2 = IAllowanceTransfer(_permit2);
+  }
 
   /// @dev Allows the contract to receive native tokens
   receive() external payable {}
 
-  /// @inheritdoc IKSZapExecutor
-  function executeZap(bytes calldata data) external payable returns (bytes memory) {
-    return _executeZap(data);
-  }
-
   /**
    * @inheritdoc IAHV2Callee
-   * @dev `solverData` is ignored
+   * @dev `ownerData` is `abi.encodePacked(LiquidityAction action, bytes actionParams)`: the
+   * first byte is the action and the remaining bytes are the action parameters. For
+   * `ADD_LIQUIDITY`, `actionParams` is `abi.encode(ZapInOwnerParams)` and `solverData` is the
+   * required `abi.encode(ZapInSolverParams)`. For `REMOVE_LIQUIDITY`, `actionParams` is
+   * `abi.encode(RemoveOwnerParams)` and `solverData` is either empty, which sets the minimum
+   * amounts to zero, or `abi.encode(RemoveSolverParams)`. An invalid action byte reverts with the
+   * panic code 0x21.
    */
-  function execute(bytes calldata ownerData, bytes calldata)
+  function execute(bytes calldata ownerData, bytes calldata solverData)
     external
     payable
     returns (bytes memory)
   {
-    return _executeZap(ownerData);
+    LiquidityAction action = LiquidityAction(uint8(ownerData[0]));
+    bytes calldata actionParams = ownerData[1:];
+
+    if (action == LiquidityAction.ADD_LIQUIDITY) {
+      return _zapIn(actionParams, solverData);
+    }
+    return _remove(actionParams, solverData);
   }
 
-  /// @dev Adds liquidity as described by `data`
-  function _executeZap(bytes calldata data) internal returns (bytes memory) {
-    ZapInParams calldata params;
+  /// @dev Adds liquidity as described by `data` and `solverData` inside one lock of the vault
+  function _zapIn(bytes calldata data, bytes calldata solverData) internal returns (bytes memory) {
+    ZapInOwnerParams calldata params;
     assembly ('memory-safe') {
       params := add(data.offset, calldataload(data.offset))
+    }
+
+    ZapInSolverParams calldata solverParams;
+    assembly ('memory-safe') {
+      solverParams := add(solverData.offset, calldataload(solverData.offset))
     }
 
     if (params.poolKey.currency0.isNative()) {
@@ -89,36 +115,29 @@ contract ZapPancakeInfinityBaseAdapter is
       WETH.wrapETH();
     }
 
-    if (params.approvalFlags.at(0) || params.approvalFlags.at(1)) {
-      IAllowanceTransfer permit2 = ICLPositionManager(params.posManager).permit2();
-      if (params.approvalFlags.at(0)) {
-        CommonLibrary.permit2ApproveInf(params.poolKey.currency0, params.posManager, permit2);
+    if (solverParams.approvalFlags.at(0) || solverParams.approvalFlags.at(1)) {
+      if (solverParams.approvalFlags.at(0)) {
+        CommonLibrary.permit2ApproveInf(params.poolKey.currency0, params.posManager, PERMIT2);
       }
-      if (params.approvalFlags.at(1)) {
-        CommonLibrary.permit2ApproveInf(params.poolKey.currency1, params.posManager, permit2);
+      if (solverParams.approvalFlags.at(1)) {
+        CommonLibrary.permit2ApproveInf(params.poolKey.currency1, params.posManager, PERMIT2);
       }
     }
 
-    bytes memory returnData = IVault(params.vault).lock(data);
+    // The lock callback runs both passes. A new position is minted to the proxy.
+    bytes memory lockData = abi.encode(data, solverData);
+    bytes memory returnData = IVault(params.vault).lock(lockData);
 
     ZapInResult memory zapInResult = abi.decode(returnData, (ZapInResult));
 
+    // The position is transferred to the recipient after the lock, unless the recipient already
+    // owns it.
     if (
       zapInResult.tokenId != 0
         && (params.tokenId == 0
           || IERC721(params.posManager).ownerOf(zapInResult.tokenId) != params.recipient)
     ) {
       IERC721(params.posManager).transferFrom(address(this), params.recipient, zapInResult.tokenId);
-    }
-
-    zapInResult.remainingAmount0 = params.poolKey.currency0.selfBalanceMinusOne();
-    if (zapInResult.remainingAmount0 > 0) {
-      params.poolKey.currency0.safeTransfer(params.refundRecipient, zapInResult.remainingAmount0);
-    }
-
-    zapInResult.remainingAmount1 = params.poolKey.currency1.selfBalanceMinusOne();
-    if (zapInResult.remainingAmount1 > 0) {
-      params.poolKey.currency1.safeTransfer(params.refundRecipient, zapInResult.remainingAmount1);
     }
 
     bytes memory result = abi.encode(zapInResult);
@@ -129,9 +148,21 @@ contract ZapPancakeInfinityBaseAdapter is
 
   /// @inheritdoc IZapPancakeInfinityBaseAdapter
   function lockAcquired(bytes calldata data) external returns (bytes memory) {
-    ZapInParams calldata params;
+    // Runs inside the lock of the vault, which is `msg.sender`; the pool manager of the pool key
+    // is the CL pool manager. Both passes call `poolSwap` of the helper of the solver with the
+    // same `poolSwap` parameters. The helper runs inside the lock and opens none. It is not
+    // recorded in the transient slot because no pool calls back into it.
+    bytes calldata ownerParamsData = data.decodeBytes(0);
+    bytes calldata solverData = data.decodeBytes(1);
+
+    ZapInOwnerParams calldata params;
     assembly ('memory-safe') {
-      params := add(data.offset, calldataload(data.offset))
+      params := add(ownerParamsData.offset, calldataload(ownerParamsData.offset))
+    }
+
+    ZapInSolverParams calldata solverParams;
+    assembly ('memory-safe') {
+      solverParams := add(solverData.offset, calldataload(solverData.offset))
     }
 
     ZapInState memory state;
@@ -141,26 +172,59 @@ contract ZapPancakeInfinityBaseAdapter is
     state.sqrtPriceLowerX96 = TickMath.getSqrtPriceAtTick(params.tickLower);
     state.sqrtPriceUpperX96 = TickMath.getSqrtPriceAtTick(params.tickUpper);
     state.tokenId = params.tokenId;
-    state.amount0 = params.poolKey.currency0.selfBalanceMinusOne();
-    state.amount1 = params.poolKey.currency1.selfBalanceMinusOne();
 
     ZapInResult memory zapInResult;
     zapInResult.posManager = params.posManager;
     zapInResult.recipient = params.recipient;
-    zapInResult.originalAmount0 = state.amount0;
-    zapInResult.originalAmount1 = state.amount1;
+    zapInResult.originalAmount0 = params.poolKey.currency0.selfBalanceMinusOne();
+    zapInResult.originalAmount1 = params.poolKey.currency1.selfBalanceMinusOne();
 
-    bytes memory zapAgainParams = ZapAgainRecord.load();
+    // First pass: the helper receives the token balances less 1 wei and the extra data. It swaps
+    // when `poolSwap.iterations` is not zero and otherwise returns the amounts unchanged. The
+    // pass adds the amounts and the liquidity that the helper returns, and reverts when that
+    // liquidity is zero.
+    uint128 liquidityToAdd = _poolSwap(
+      ownerParamsData,
+      solverData,
+      solverParams.helper,
+      state,
+      IZapPancakeInfinityBaseHelper.PoolSwapAdditionalParams({
+        amount0: zapInResult.originalAmount0,
+        amount1: zapInResult.originalAmount1,
+        useExtraData: true
+      })
+    );
 
-    _addLiquidity(params, state, zapInResult);
+    require(liquidityToAdd != 0, ZapInPancakeInfinityInsufficientLiquidity());
+    _modifyLiquidity(params, solverParams.readBalanceFlag, liquidityToAdd, state, zapInResult);
 
-    if (zapAgainParams.length != 0 && params.helper != address(0)) {
-      _zapAgain(params, state, zapInResult, zapAgainParams);
+    // Second pass: runs when `poolSwap.iterations` is not zero and the leftover of currency0 or
+    // currency1 is at least its value in `minZapInAmounts`. The helper receives the leftover
+    // balances less 1 wei without the extra data, and the addition is skipped when the liquidity
+    // to add is zero. The leftover balances stay in the proxy.
+    if (
+      solverParams.poolSwap.iterations != 0
+        && _reachesMinimums(params.poolKey, solverParams.minZapInAmounts)
+    ) {
+      liquidityToAdd = _poolSwap(
+        ownerParamsData,
+        solverData,
+        solverParams.helper,
+        state,
+        IZapPancakeInfinityBaseHelper.PoolSwapAdditionalParams({
+          amount0: params.poolKey.currency0.selfBalanceMinusOne(),
+          amount1: params.poolKey.currency1.selfBalanceMinusOne(),
+          useExtraData: false
+        })
+      );
+      if (liquidityToAdd != 0) {
+        _modifyLiquidity(params, solverParams.readBalanceFlag, liquidityToAdd, state, zapInResult);
+      }
     }
 
+    // `minLiquidity` is checked on the liquidity added by both passes.
     require(
-      zapInResult.positionLiquidity >= params.minLiquidity,
-      ZapInPancakeInfinityInsufficientLiquidity()
+      zapInResult.addedLiquidity >= params.minLiquidity, ZapInPancakeInfinityInsufficientLiquidity()
     );
 
     zapInResult.tokenId = state.tokenId;
@@ -168,42 +232,113 @@ contract ZapPancakeInfinityBaseAdapter is
     return abi.encode(zapInResult);
   }
 
-  /// @dev Adds the amounts in `state` to the position and records the addition in `zapInResult`
-  function _addLiquidity(
-    ZapInParams calldata params,
+  /// @dev Returns whether the balance of currency0 or currency1, minus 1, is at least its minimum
+  /// in `minZapInAmounts`
+  function _reachesMinimums(PoolKey calldata poolKey, PackedU128 minZapInAmounts)
+    internal
+    view
+    returns (bool)
+  {
+    return poolKey.currency0.selfBalanceMinusOne() >= minZapInAmounts.value0()
+      || poolKey.currency1.selfBalanceMinusOne() >= minZapInAmounts.value1();
+  }
+
+  /// @dev Calls `helper` with the amounts in `additionalParams`, records the amounts to add that
+  /// it returns in `state` and returns the liquidity they add
+  function _poolSwap(
+    bytes calldata ownerData,
+    bytes calldata solverData,
+    address helper,
+    ZapInState memory state,
+    IZapPancakeInfinityBaseHelper.PoolSwapAdditionalParams memory additionalParams
+  ) internal returns (uint128 liquidityToAdd) {
+    bytes memory additionalData = abi.encode(additionalParams);
+
+    bytes memory returnData = _poolSwap(helper, ownerData, solverData, additionalData);
+    IZapPancakeInfinityBaseHelper.PoolSwapResult memory result =
+      abi.decode(abi.decode(returnData, (bytes)), (IZapPancakeInfinityBaseHelper.PoolSwapResult));
+
+    state.amount0 = result.amount0ToAdd;
+    state.amount1 = result.amount1ToAdd;
+    return result.liquidityToAdd;
+  }
+
+  /// @dev Removes liquidity as described by `data` and `solverData`, takes the amounts into the
+  /// proxy and transfers the position to the recipient unless it is the zero address
+  function _remove(bytes calldata data, bytes calldata solverData) internal returns (bytes memory) {
+    RemoveOwnerParams calldata params;
+    assembly ('memory-safe') {
+      params := add(data.offset, calldataload(data.offset))
+    }
+
+    PackedU128 minRemoveAmounts = PackedU128.wrap(0);
+    if (solverData.length != 0) {
+      RemoveSolverParams calldata solverParams;
+      assembly ('memory-safe') {
+        solverParams := solverData.offset
+      }
+      minRemoveAmounts = solverParams.minRemoveAmounts;
+    }
+
+    (PoolKey memory poolKey,) =
+      ICLPositionManager(params.posManager).getPoolAndPositionInfo(params.tokenId);
+
+    uint256 balance0Before = poolKey.currency0.selfBalance();
+    uint256 balance1Before = poolKey.currency1.selfBalance();
+
+    bytes memory actions = new bytes(2);
+    bytes[] memory actionParams = new bytes[](2);
+
+    actions[0] = bytes1(uint8(Actions.CL_DECREASE_LIQUIDITY));
+    actionParams[0] = abi.encode(
+      params.tokenId,
+      params.liquidity,
+      minRemoveAmounts.value0(),
+      minRemoveAmounts.value1(),
+      params.hookData
+    );
+
+    actions[1] = bytes1(uint8(Actions.TAKE_PAIR));
+    actionParams[1] = abi.encode(poolKey.currency0, poolKey.currency1, address(this));
+
+    bytes memory payload = abi.encode(actions, actionParams);
+    ICLPositionManager(params.posManager).modifyLiquidities(payload, block.timestamp);
+
+    uint256 amount0 = poolKey.currency0.selfBalance() - balance0Before;
+    uint256 amount1 = poolKey.currency1.selfBalance() - balance1Before;
+
+    if (params.recipient != address(0)) {
+      IERC721(params.posManager).transferFrom(address(this), params.recipient, params.tokenId);
+    }
+
+    bytes memory result = abi.encode(
+      RemoveResult({
+        posManager: params.posManager,
+        tokenId: params.tokenId,
+        liquidity: params.liquidity,
+        amount0: amount0,
+        amount1: amount1
+      })
+    );
+    emit RemoveLiquidity(result);
+
+    return result;
+  }
+
+  /// @dev Adds `liquidityToAdd` to the position, settling the amounts that it requires, deducts
+  /// the added amounts from `state` and records the addition in `zapInResult`
+  function _modifyLiquidity(
+    ZapInOwnerParams calldata params,
+    bool readBalanceFlag,
+    uint128 liquidityToAdd,
     ZapInState memory state,
     ZapInResult memory zapInResult
   ) internal {
-    (uint128 liquidity, uint256 addedAmount0, uint256 addedAmount1) = _previewAddLiquidity(state);
-    if (liquidity == 0) {
-      return;
-    }
+    (uint256 addedAmount0, uint256 addedAmount1) = _amountsForLiquidity(state, liquidityToAdd);
+    bool mint = state.tokenId == 0;
 
-    _modifyLiquidity(params, state, zapInResult, liquidity, addedAmount0, addedAmount1);
-  }
-
-  /**
-   * @dev Adds `liquidity` to the position, settling the amounts it requires, and records the
-   * addition in `zapInResult`
-   * @param params The zap in parameters
-   * @param state The pool, the price range and the amounts held, updated with the amounts left
-   * @param zapInResult The result updated with the liquidity and the amounts added
-   * @param liquidity The liquidity to add
-   * @param addedAmount0 The amount of currency0 the liquidity requires
-   * @param addedAmount1 The amount of currency1 the liquidity requires
-   */
-  function _modifyLiquidity(
-    ZapInParams calldata params,
-    ZapInState memory state,
-    ZapInResult memory zapInResult,
-    uint128 liquidity,
-    uint256 addedAmount0,
-    uint256 addedAmount1
-  ) internal {
-    bool currency0Native = params.poolKey.currency0.isNative();
     uint128 liquidityBefore = 0;
-
-    if (params.readBalanceFlag) {
+    if (readBalanceFlag) {
       if (addedAmount0 > state.amount0) {
         addedAmount0 = state.amount0;
       }
@@ -211,68 +346,29 @@ contract ZapPancakeInfinityBaseAdapter is
         addedAmount1 = state.amount1;
       }
 
-      /// Settles the added amounts for the position manager, which computes the liquidity from
-      /// the credited deltas
+      // Settles the added amounts for the position manager, which computes the liquidity from
+      // the credited deltas
       _settleFor(state.vault, params.poolKey.currency0, params.posManager, addedAmount0);
       _settleFor(state.vault, params.poolKey.currency1, params.posManager, addedAmount1);
 
-      if (state.tokenId != 0) {
+      if (!mint) {
         liquidityBefore = ICLPositionManager(params.posManager).getPositionLiquidity(state.tokenId);
       }
-    }
-
-    /// The position manager credits the accrued fees of an increase against the principal. The
-    /// native amount is settled in full for it, and CLOSE_CURRENCY returns the credited fees
-    if (currency0Native && !params.readBalanceFlag) {
+    } else if (params.poolKey.currency0.isNative()) {
+      // The position manager credits the accrued fees of an increase against the principal. The
+      // native amount is settled in full for it, and CLOSE_CURRENCY returns the credited fees
       _settleFor(state.vault, params.poolKey.currency0, params.posManager, addedAmount0);
     }
 
     bytes memory actions = new bytes(3);
     bytes[] memory actionParams = new bytes[](3);
 
-    if (state.tokenId == 0) {
+    if (mint) {
       state.tokenId = ICLPositionManager(params.posManager).nextTokenId();
-
-      if (params.readBalanceFlag) {
-        actions[0] = bytes1(uint8(Actions.CL_MINT_POSITION_FROM_DELTAS));
-        actionParams[0] = abi.encode(
-          params.poolKey,
-          params.tickLower,
-          params.tickUpper,
-          type(uint128).max,
-          type(uint128).max,
-          address(this),
-          params.addLiquidityHookData
-        );
-      } else {
-        actions[0] = bytes1(uint8(Actions.CL_MINT_POSITION));
-        actionParams[0] = abi.encode(
-          params.poolKey,
-          params.tickLower,
-          params.tickUpper,
-          liquidity,
-          type(uint128).max,
-          type(uint128).max,
-          address(this),
-          params.addLiquidityHookData
-        );
-      }
+      (actions[0], actionParams[0]) = _mintAction(params, readBalanceFlag, liquidityToAdd);
     } else {
-      if (params.readBalanceFlag) {
-        actions[0] = bytes1(uint8(Actions.CL_INCREASE_LIQUIDITY_FROM_DELTAS));
-        actionParams[0] = abi.encode(
-          state.tokenId, type(uint128).max, type(uint128).max, params.addLiquidityHookData
-        );
-      } else {
-        actions[0] = bytes1(uint8(Actions.CL_INCREASE_LIQUIDITY));
-        actionParams[0] = abi.encode(
-          state.tokenId,
-          liquidity,
-          type(uint128).max,
-          type(uint128).max,
-          params.addLiquidityHookData
-        );
-      }
+      (actions[0], actionParams[0]) =
+        _increaseLiquidityAction(params, readBalanceFlag, state.tokenId, liquidityToAdd);
     }
 
     actions[1] = bytes1(uint8(Actions.CLOSE_CURRENCY));
@@ -283,22 +379,9 @@ contract ZapPancakeInfinityBaseAdapter is
 
     ICLPositionManager(params.posManager).modifyLiquiditiesWithoutLock(actions, actionParams);
 
-    if (params.readBalanceFlag) {
-      unchecked {
-        liquidity = ICLPositionManager(params.posManager).getPositionLiquidity(state.tokenId)
-          - liquidityBefore;
-      }
-
-      uint256 balance0 = params.poolKey.currency0.selfBalanceMinusOne();
-      uint256 balance1 = params.poolKey.currency1.selfBalanceMinusOne();
-
-      unchecked {
-        addedAmount0 = state.amount0 > balance0 ? state.amount0 - balance0 : 0;
-        addedAmount1 = state.amount1 > balance1 ? state.amount1 - balance1 : 0;
-      }
-
-      state.amount0 = balance0;
-      state.amount1 = balance1;
+    uint128 addedLiquidity = liquidityToAdd;
+    if (readBalanceFlag) {
+      (addedLiquidity, addedAmount0, addedAmount1) = _readDeltas(params, state, liquidityBefore);
     } else {
       unchecked {
         state.amount0 = state.amount0 > addedAmount0 ? state.amount0 - addedAmount0 : 0;
@@ -307,61 +390,115 @@ contract ZapPancakeInfinityBaseAdapter is
     }
 
     unchecked {
-      zapInResult.positionLiquidity += liquidity;
+      zapInResult.addedLiquidity += addedLiquidity;
       zapInResult.addedAmount0 += addedAmount0;
       zapInResult.addedAmount1 += addedAmount1;
     }
   }
 
-  /// @dev Swaps the remaining amounts through the helper and adds the resulting liquidity to the
-  /// position
-  function _zapAgain(
-    ZapInParams calldata params,
-    ZapInState memory state,
-    ZapInResult memory zapInResult,
-    bytes memory zapAgainParams
-  ) internal {
-    PancakeInfinityZapAgainParams memory zapAgain =
-      abi.decode(zapAgainParams, (PancakeInfinityZapAgainParams));
-
-    bytes memory fixedParams = abi.encode(
-      ZapInFixedParams({
-        posManager: params.posManager,
-        vault: params.vault,
-        poolKey: params.poolKey,
-        tickLower: params.tickLower,
-        tickUpper: params.tickUpper,
-        sqrtPriceLimit0X96: zapAgain.sqrtPriceLimit0X96,
-        sqrtPriceLimit1X96: zapAgain.sqrtPriceLimit1X96,
-        iterations: zapAgain.iterations,
-        swapHookData: zapAgain.swapHookData,
-        addLiquidityHookData: '',
-        optimizer: zapAgain.optimizer,
-        optimizeSolverParams: zapAgain.optimizeSolverParams,
-        readBalanceFlag: params.readBalanceFlag
-      })
-    );
-
-    IZapPoolSwapAgainHelper.PoolSwapAgainResult memory result =
-      _poolSwapAgain(params.helper, fixedParams, zapAgain.minZapInAmounts);
-
-    state.amount0 = result.amount0;
-    state.amount1 = result.amount1;
-
-    if (result.liquidity != 0) {
-      _modifyLiquidity(
-        params,
-        state,
-        zapInResult,
-        uint128(result.liquidity),
-        result.addedAmount0,
-        result.addedAmount1
+  /**
+   * @dev Returns the position manager action that mints the position and its parameters:
+   * CL_MINT_POSITION with the liquidity, or CL_MINT_POSITION_FROM_DELTAS with `readBalanceFlag`
+   * @param params The owner parameters of the zap in
+   * @param readBalanceFlag Whether the position manager mints the liquidity of the settled deltas
+   * @param liquidity The liquidity to mint when `readBalanceFlag` is not set
+   * @return action The position manager action
+   * @return actionParams The ABI-encoded parameters of the action
+   */
+  function _mintAction(ZapInOwnerParams calldata params, bool readBalanceFlag, uint128 liquidity)
+    internal
+    view
+    returns (bytes1 action, bytes memory actionParams)
+  {
+    if (readBalanceFlag) {
+      action = bytes1(uint8(Actions.CL_MINT_POSITION_FROM_DELTAS));
+      actionParams = abi.encode(
+        params.poolKey,
+        params.tickLower,
+        params.tickUpper,
+        type(uint128).max,
+        type(uint128).max,
+        address(this),
+        params.addLiquidityHookData
+      );
+    } else {
+      action = bytes1(uint8(Actions.CL_MINT_POSITION));
+      actionParams = abi.encode(
+        params.poolKey,
+        params.tickLower,
+        params.tickUpper,
+        liquidity,
+        type(uint128).max,
+        type(uint128).max,
+        address(this),
+        params.addLiquidityHookData
       );
     }
   }
 
-  /// @dev Pays `amount` of `currency` to the vault, crediting `recipient` with the amount that the
-  /// vault actually received
+  /**
+   * @dev Returns the position manager action that increases the liquidity of the position and its
+   * parameters: CL_INCREASE_LIQUIDITY with the liquidity, or CL_INCREASE_LIQUIDITY_FROM_DELTAS with
+   * `readBalanceFlag`
+   * @param params The owner parameters of the zap in
+   * @param readBalanceFlag Whether the position manager adds the liquidity of the settled deltas
+   * @param tokenId The position to increase
+   * @param liquidity The liquidity to add when `readBalanceFlag` is not set
+   * @return action The position manager action
+   * @return actionParams The ABI-encoded parameters of the action
+   */
+  function _increaseLiquidityAction(
+    ZapInOwnerParams calldata params,
+    bool readBalanceFlag,
+    uint256 tokenId,
+    uint128 liquidity
+  ) internal pure returns (bytes1 action, bytes memory actionParams) {
+    if (readBalanceFlag) {
+      action = bytes1(uint8(Actions.CL_INCREASE_LIQUIDITY_FROM_DELTAS));
+      actionParams =
+        abi.encode(tokenId, type(uint128).max, type(uint128).max, params.addLiquidityHookData);
+    } else {
+      action = bytes1(uint8(Actions.CL_INCREASE_LIQUIDITY));
+      actionParams = abi.encode(
+        tokenId, liquidity, type(uint128).max, type(uint128).max, params.addLiquidityHookData
+      );
+    }
+  }
+
+  /**
+   * @dev Reads the liquidity added to the position and the amounts spent from the balances, and
+   * sets the amounts in `state` to the balances less 1 wei
+   * @param params The owner parameters of the zap in
+   * @param state The position and the amounts available before the addition
+   * @param liquidityBefore The liquidity of the position before the addition
+   * @return liquidity The liquidity added
+   * @return addedAmount0 The amount of currency0 spent
+   * @return addedAmount1 The amount of currency1 spent
+   */
+  function _readDeltas(
+    ZapInOwnerParams calldata params,
+    ZapInState memory state,
+    uint128 liquidityBefore
+  ) internal view returns (uint128 liquidity, uint256 addedAmount0, uint256 addedAmount1) {
+    unchecked {
+      liquidity =
+        ICLPositionManager(params.posManager).getPositionLiquidity(state.tokenId) - liquidityBefore;
+    }
+
+    uint256 balance0 = params.poolKey.currency0.selfBalanceMinusOne();
+    uint256 balance1 = params.poolKey.currency1.selfBalanceMinusOne();
+
+    unchecked {
+      addedAmount0 = state.amount0 > balance0 ? state.amount0 - balance0 : 0;
+      addedAmount1 = state.amount1 > balance1 ? state.amount1 - balance1 : 0;
+    }
+
+    state.amount0 = balance0;
+    state.amount1 = balance1;
+  }
+
+  /// @dev Pays `amount` of `currency` to the vault, crediting `recipient` with the amount that
+  /// the vault received, which can be less for fee-on-transfer tokens
   function _settleFor(IVault vault, address currency, address recipient, uint256 amount) internal {
     if (amount == 0) {
       return;
@@ -377,25 +514,19 @@ contract ZapPancakeInfinityBaseAdapter is
   }
 
   /**
-   * @dev Computes the liquidity that the amounts in `state` add to the price range at the current
-   * pool price, and the amounts of currency0 and currency1, rounded up, that the liquidity requires
-   * @param state The pool, the price range and the amounts to add
-   * @return liquidity The liquidity added
+   * @dev Computes the amounts of currency0 and currency1, rounded up, that `liquidity` requires in
+   * the price range at the current pool price
+   * @param state The pool and the price range
+   * @param liquidity The liquidity to add
    * @return addedAmount0 The amount of currency0 the liquidity requires
    * @return addedAmount1 The amount of currency1 the liquidity requires
    */
-  function _previewAddLiquidity(ZapInState memory state)
+  function _amountsForLiquidity(ZapInState memory state, uint128 liquidity)
     internal
     view
-    returns (uint128 liquidity, uint256 addedAmount0, uint256 addedAmount1)
+    returns (uint256 addedAmount0, uint256 addedAmount1)
   {
     (uint160 sqrtPriceX96,,,) = state.clPoolManager.getSlot0(state.poolId);
-
-    liquidity = uint128(
-      LiquidityAmounts.getLiquidityForAmounts(
-        sqrtPriceX96, state.sqrtPriceLowerX96, state.sqrtPriceUpperX96, state.amount0, state.amount1
-      )
-    );
 
     if (sqrtPriceX96 <= state.sqrtPriceLowerX96) {
       addedAmount0 = SqrtPriceMath.getAmount0Delta(

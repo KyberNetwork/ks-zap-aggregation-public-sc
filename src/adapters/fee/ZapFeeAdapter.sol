@@ -9,11 +9,6 @@ import {TokenHelper} from 'ks-common-sc/src/libraries/token/TokenHelper.sol';
 /**
  * @title ZapFeeAdapter
  * @notice Transfers fees out of the balances of the account that delegatecalls it
- * @dev `ownerData` is `abi.encode(TokenFeeCaps[])`. `solverData` is either empty, in which case no
- * fee is taken, or `abi.encode(uint256[][] fees)`, where `fees[i][j]` is the fee of `caps[j]` of
- * the token entry `i`. When `FLAT_FEE_FLAG` is set in a fee, the fee is the flat amount held in
- * the remaining bits. Otherwise the fee is a rate out of `FEE_DENOMINATOR`. Every fee of an entry
- * is computed from the balance of its token before the first transfer of the entry.
  */
 contract ZapFeeAdapter is IZapFeeAdapter {
   using TokenHelper for address;
@@ -26,6 +21,9 @@ contract ZapFeeAdapter is IZapFeeAdapter {
 
   /**
    * @inheritdoc IAHV2Callee
+   * @dev `ownerData` is `abi.encode(TokenFeeCaps[])`. `solverData` is either empty, in which case
+   * no fee is taken, or `abi.encode(uint256[][] fees)`, where `fees[i][j]` is the fee of `caps[j]`
+   * of the token entry `i`.
    * @return The amounts transferred, as `abi.encode(uint256[][])` with one amount per cap of each
    * token entry
    */
@@ -62,6 +60,7 @@ contract ZapFeeAdapter is IZapFeeAdapter {
     require(fees.length == entry.caps.length, MismatchedArrayLengths());
 
     address token = entry.token;
+    // Every fee of an entry is computed from the balance of its token before the first transfer
     uint256 base = token.selfBalance();
     amounts = new uint256[](fees.length);
 
@@ -69,6 +68,8 @@ contract ZapFeeAdapter is IZapFeeAdapter {
       address recipient = entry.caps[j].recipient;
       uint256 maxAmount = base * entry.caps[j].maxFeeRate / FEE_DENOMINATOR;
 
+      // With FLAT_FEE_FLAG set, the fee is the flat amount held in the remaining bits.
+      // Otherwise the fee is a rate out of FEE_DENOMINATOR.
       uint256 fee = fees[j];
       uint256 amount =
         fee & FLAT_FEE_FLAG != 0 ? fee & ~FLAT_FEE_FLAG : base * fee / FEE_DENOMINATOR;

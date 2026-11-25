@@ -4,6 +4,9 @@ pragma solidity 0.8.38;
 import {
   IZapUniswapV4BaseAdapter
 } from '../../interfaces/adapters/uniswap-v4-base/IZapUniswapV4BaseAdapter.sol';
+import {
+  IZapUniswapV4BaseHelper
+} from '../../interfaces/adapters/uniswap-v4-base/IZapUniswapV4BaseHelper.sol';
 
 import {ImmutableState} from '../../base/ImmutableState.sol';
 import {ZapHelperCaller} from '../../base/ZapHelperCaller.sol';
@@ -30,21 +33,8 @@ import {IERC721} from 'openzeppelin-contracts/contracts/token/ERC721/IERC721.sol
  * @notice Adds liquidity to a Uniswap V4 position with the token balances of the account that
  * delegatecalls it, or removes liquidity from a position that account holds
  * @dev AHV2ProxyCallee delegatecalls the adapter, so the balances and the positions are those of
- * the proxy. Adding liquidity runs inside one unlock of the pool manager and up to two passes, and
- * both passes call `poolSwap` of the helper of the solver with the same `poolSwap` parameters; the
- * helper is required. The helper runs inside that unlock and opens none. The first pass calls the
- * helper with the token balances less 1 wei and the extra data, and adds the amounts and the
- * liquidity that the helper returns. The helper swaps when `poolSwap.iterations` is not zero;
- * otherwise it returns the amounts unchanged. The first pass reverts with
- * `ZapInUniswapV4InsufficientLiquidity` when it adds no liquidity. The second pass runs only when
- * `poolSwap.iterations` is not zero and the leftover of currency0 or currency1 is at least its
- * value in `minZapInAmounts`; it calls the helper with the leftover balances less 1 wei and
- * without the extra data, and skips its addition when the liquidity to add is zero.
- * `minLiquidity` is checked on the liquidity added by both passes. 1 wei of each token is kept
- * when adding liquidity, and the leftover balances stay in the proxy. The helper is not recorded
- * in the transient slot because no pool calls back into it. A new position is minted to the proxy
- * and transferred to the recipient after the unlock. The unlock callback uses `msg.sender` as the
- * pool manager.
+ * the proxy. Adding liquidity runs inside one unlock of the pool manager. The tokens are approved
+ * on the Permit2 contract set at construction.
  */
 contract ZapUniswapV4BaseAdapter is IZapUniswapV4BaseAdapter, ImmutableState, ZapHelperCaller {
   using TokenHelper for address;
@@ -63,8 +53,16 @@ contract ZapUniswapV4BaseAdapter is IZapUniswapV4BaseAdapter, ImmutableState, Za
     uint256 amount1;
   }
 
-  /// @param _WETH The wrapped native token
-  constructor(address _WETH) ImmutableState(_WETH) {}
+  /// @dev The Permit2 contract through which the position manager pulls the tokens
+  IAllowanceTransfer internal immutable PERMIT2;
+
+  /**
+   * @param _WETH The wrapped native token
+   * @param _permit2 The Permit2 contract of the chain
+   */
+  constructor(address _WETH, address _permit2) ImmutableState(_WETH) {
+    PERMIT2 = IAllowanceTransfer(_permit2);
+  }
 
   /// @dev Allows the contract to receive native tokens
   receive() external payable {}
@@ -115,21 +113,22 @@ contract ZapUniswapV4BaseAdapter is IZapUniswapV4BaseAdapter, ImmutableState, Za
     }
 
     if (solverParams.approvalFlags.at(0) || solverParams.approvalFlags.at(1)) {
-      IAllowanceTransfer permit2 = IPositionManager(params.posManager).permit2();
-
       if (solverParams.approvalFlags.at(0)) {
-        CommonLibrary.permit2ApproveInf(params.poolKey.currency0, params.posManager, permit2);
+        CommonLibrary.permit2ApproveInf(params.poolKey.currency0, params.posManager, PERMIT2);
       }
       if (solverParams.approvalFlags.at(1)) {
-        CommonLibrary.permit2ApproveInf(params.poolKey.currency1, params.posManager, permit2);
+        CommonLibrary.permit2ApproveInf(params.poolKey.currency1, params.posManager, PERMIT2);
       }
     }
 
+    // The unlock callback runs both passes. A new position is minted to the proxy.
     bytes memory unlockData = abi.encode(data, solverData);
     bytes memory returnData = IPoolManager(params.poolManager).unlock(unlockData);
 
     ZapInResult memory zapInResult = abi.decode(returnData, (ZapInResult));
 
+    // The position is transferred to the recipient after the unlock, unless the recipient already
+    // owns it.
     if (
       zapInResult.tokenId != 0
         && (params.tokenId == 0
@@ -146,6 +145,10 @@ contract ZapUniswapV4BaseAdapter is IZapUniswapV4BaseAdapter, ImmutableState, Za
 
   /// @inheritdoc IZapUniswapV4BaseAdapter
   function unlockCallback(bytes calldata data) external returns (bytes memory) {
+    // Runs inside the unlock of the pool manager, which is `msg.sender`. Both passes call
+    // `poolSwap` of the helper of the solver with the same `poolSwap` parameters. The helper runs
+    // inside the unlock and opens none. It is not recorded in the transient slot because no pool
+    // calls back into it.
     bytes calldata ownerParamsData = data.decodeBytes(0);
     bytes calldata solverData = data.decodeBytes(1);
 
@@ -172,12 +175,16 @@ contract ZapUniswapV4BaseAdapter is IZapUniswapV4BaseAdapter, ImmutableState, Za
     zapInResult.originalAmount0 = params.poolKey.currency0.selfBalanceMinusOne();
     zapInResult.originalAmount1 = params.poolKey.currency1.selfBalanceMinusOne();
 
+    // First pass: the helper receives the token balances less 1 wei and the extra data. It swaps
+    // when `poolSwap.iterations` is not zero and otherwise returns the amounts unchanged. The
+    // pass adds the amounts and the liquidity that the helper returns, and reverts when that
+    // liquidity is zero.
     uint128 liquidityToAdd = _poolSwap(
       ownerParamsData,
       solverData,
       solverParams.helper,
       state,
-      PoolSwapAdditionalParams({
+      IZapUniswapV4BaseHelper.PoolSwapAdditionalParams({
         amount0: zapInResult.originalAmount0,
         amount1: zapInResult.originalAmount1,
         useExtraData: true
@@ -187,6 +194,10 @@ contract ZapUniswapV4BaseAdapter is IZapUniswapV4BaseAdapter, ImmutableState, Za
     require(liquidityToAdd != 0, ZapInUniswapV4InsufficientLiquidity());
     _modifyLiquidity(params, solverParams.readBalanceFlag, liquidityToAdd, state, zapInResult);
 
+    // Second pass: runs when `poolSwap.iterations` is not zero and the leftover of currency0 or
+    // currency1 is at least its value in `minZapInAmounts`. The helper receives the leftover
+    // balances less 1 wei without the extra data, and the addition is skipped when the liquidity
+    // to add is zero. The leftover balances stay in the proxy.
     if (
       solverParams.poolSwap.iterations != 0
         && _reachesMinimums(params.poolKey, solverParams.minZapInAmounts)
@@ -196,7 +207,7 @@ contract ZapUniswapV4BaseAdapter is IZapUniswapV4BaseAdapter, ImmutableState, Za
         solverData,
         solverParams.helper,
         state,
-        PoolSwapAdditionalParams({
+        IZapUniswapV4BaseHelper.PoolSwapAdditionalParams({
           amount0: params.poolKey.currency0.selfBalanceMinusOne(),
           amount1: params.poolKey.currency1.selfBalanceMinusOne(),
           useExtraData: false
@@ -207,6 +218,7 @@ contract ZapUniswapV4BaseAdapter is IZapUniswapV4BaseAdapter, ImmutableState, Za
       }
     }
 
+    // `minLiquidity` is checked on the liquidity added by both passes.
     require(
       zapInResult.addedLiquidity >= params.minLiquidity, ZapInUniswapV4InsufficientLiquidity()
     );
@@ -234,12 +246,13 @@ contract ZapUniswapV4BaseAdapter is IZapUniswapV4BaseAdapter, ImmutableState, Za
     bytes calldata solverData,
     address helper,
     ZapInState memory state,
-    PoolSwapAdditionalParams memory additionalParams
+    IZapUniswapV4BaseHelper.PoolSwapAdditionalParams memory additionalParams
   ) internal returns (uint128 liquidityToAdd) {
     bytes memory additionalData = abi.encode(additionalParams);
 
     bytes memory returnData = _poolSwap(helper, ownerData, solverData, additionalData);
-    PoolSwapResult memory result = abi.decode(abi.decode(returnData, (bytes)), (PoolSwapResult));
+    IZapUniswapV4BaseHelper.PoolSwapResult memory result =
+      abi.decode(abi.decode(returnData, (bytes)), (IZapUniswapV4BaseHelper.PoolSwapResult));
 
     state.amount0 = result.amount0ToAdd;
     state.amount1 = result.amount1ToAdd;
@@ -329,8 +342,8 @@ contract ZapUniswapV4BaseAdapter is IZapUniswapV4BaseAdapter, ImmutableState, Za
         addedAmount1 = state.amount1;
       }
 
-      /// Settles the added amounts for the position manager, which computes the liquidity from
-      /// the credited deltas
+      // Settles the added amounts for the position manager, which computes the liquidity from
+      // the credited deltas
       _settleFor(state.poolManager, params.poolKey.currency0, params.posManager, addedAmount0);
       _settleFor(state.poolManager, params.poolKey.currency1, params.posManager, addedAmount1);
 
@@ -338,8 +351,8 @@ contract ZapUniswapV4BaseAdapter is IZapUniswapV4BaseAdapter, ImmutableState, Za
         liquidityBefore = IPositionManager(params.posManager).getPositionLiquidity(state.tokenId);
       }
     } else if (params.poolKey.currency0.isNative()) {
-      /// The position manager credits the accrued fees of an increase against the principal. The
-      /// native amount is settled in full for it, and CLOSE_CURRENCY returns the credited fees
+      // The position manager credits the accrued fees of an increase against the principal. The
+      // native amount is settled in full for it, and CLOSE_CURRENCY returns the credited fees
       _settleFor(state.poolManager, params.poolKey.currency0, params.posManager, addedAmount0);
     }
 

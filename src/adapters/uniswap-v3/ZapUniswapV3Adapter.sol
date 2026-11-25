@@ -2,6 +2,7 @@
 pragma solidity ^0.8.35;
 
 import {IZapUniswapV3Adapter} from '../../interfaces/adapters/uniswap-v3/IZapUniswapV3Adapter.sol';
+import {IZapUniswapV3Helper} from '../../interfaces/adapters/uniswap-v3/IZapUniswapV3Helper.sol';
 
 import {ImmutableState} from '../../base/ImmutableState.sol';
 import {ZapHelperCaller} from '../../base/ZapHelperCaller.sol';
@@ -21,19 +22,8 @@ import {IERC721} from 'openzeppelin-contracts/contracts/token/ERC721/IERC721.sol
  * @notice Adds liquidity to a Uniswap V3 position with the token balances of the account that
  * delegatecalls it, or removes liquidity from a position that account holds
  * @dev AHV2ProxyCallee delegatecalls the adapter, so the balances and the positions are those of
- * the proxy. Adding liquidity runs up to two passes, and both call `poolSwap` of the helper of
- * the solver with the same `poolSwap` parameters; the helper is required. The first pass calls the
- * helper with the token balances less 1 wei and the extra data, and adds the amounts and the
- * liquidity that the helper returns. The helper swaps when `poolSwap.iterations` is not zero;
- * otherwise it returns the amounts unchanged. The first pass reverts with
- * `ZapInUniswapV3InsufficientLiquidity` when it adds no liquidity. The second pass runs only when
- * `poolSwap.iterations` is not zero and the leftover of token0 or token1 is at least its value in
- * `minZapInAmounts`; it calls the helper with the leftover balances less 1 wei and without the
- * extra data, and skips its addition when the liquidity to add is zero. `minLiquidity` is
- * checked on the liquidity added by both passes. 1 wei of each token is kept when adding
- * liquidity, and the leftover balances stay in the proxy. The helper is recorded in a transient
- * slot before the first pool swap and cleared after the second pass, and the fallback forwards
- * the swap callbacks of the pools to the recorded helper.
+ * the proxy. The fallback forwards the swap callbacks of the pools to the helper recorded in a
+ * transient slot.
  */
 contract ZapUniswapV3Adapter is IZapUniswapV3Adapter, ImmutableState, ZapHelperCaller {
   using TokenHelper for address;
@@ -110,13 +100,21 @@ contract ZapUniswapV3Adapter is IZapUniswapV3Adapter, ImmutableState, ZapHelperC
     zapInResult.originalAmount0 = state.token0.selfBalanceMinusOne();
     zapInResult.originalAmount1 = state.token1.selfBalanceMinusOne();
 
+    // Both passes call `poolSwap` of the helper of the solver with the same `poolSwap`
+    // parameters. The helper is recorded in a transient slot before the first pool swap and
+    // cleared after the second pass, so that the fallback forwards the swap callbacks of the
+    // pools to it.
+    // First pass: the helper receives the token balances less 1 wei and the extra data. It swaps
+    // when `poolSwap.iterations` is not zero and otherwise returns the amounts unchanged. The
+    // pass adds the amounts and the liquidity that the helper returns, and reverts when that
+    // liquidity is zero.
     _setHelper(solverParams.helper);
     uint128 liquidityToAdd = _poolSwap(
       data,
       solverData,
       solverParams.helper,
       state,
-      PoolSwapAdditionalParams({
+      IZapUniswapV3Helper.PoolSwapAdditionalParams({
         amount0: zapInResult.originalAmount0,
         amount1: zapInResult.originalAmount1,
         useExtraData: true
@@ -133,6 +131,10 @@ contract ZapUniswapV3Adapter is IZapUniswapV3Adapter, ImmutableState, ZapHelperC
     }
     _modifyPosition(params, state, zapInResult);
 
+    // Second pass: runs when `poolSwap.iterations` is not zero and the leftover of token0 or
+    // token1 is at least its value in `minZapInAmounts`. The helper receives the leftover
+    // balances less 1 wei without the extra data, and the addition is skipped when the liquidity
+    // to add is zero. The leftover balances stay in the proxy.
     if (
       solverParams.poolSwap.iterations != 0 && _reachesMinimums(state, solverParams.minZapInAmounts)
     ) {
@@ -141,7 +143,7 @@ contract ZapUniswapV3Adapter is IZapUniswapV3Adapter, ImmutableState, ZapHelperC
         solverData,
         solverParams.helper,
         state,
-        PoolSwapAdditionalParams({
+        IZapUniswapV3Helper.PoolSwapAdditionalParams({
           amount0: state.token0.selfBalanceMinusOne(),
           amount1: state.token1.selfBalanceMinusOne(),
           useExtraData: false
@@ -153,6 +155,7 @@ contract ZapUniswapV3Adapter is IZapUniswapV3Adapter, ImmutableState, ZapHelperC
     }
     _clearHelper();
 
+    // `minLiquidity` is checked on the liquidity added by both passes.
     require(
       zapInResult.addedLiquidity >= params.minLiquidity, ZapInUniswapV3InsufficientLiquidity()
     );
@@ -189,12 +192,13 @@ contract ZapUniswapV3Adapter is IZapUniswapV3Adapter, ImmutableState, ZapHelperC
     bytes calldata solverData,
     address helper,
     ZapInState memory state,
-    PoolSwapAdditionalParams memory additionalParams
+    IZapUniswapV3Helper.PoolSwapAdditionalParams memory additionalParams
   ) internal returns (uint128 liquidityToAdd) {
     bytes memory additionalData = abi.encode(additionalParams);
 
     bytes memory returnData = _poolSwap(helper, ownerData, solverData, additionalData);
-    PoolSwapResult memory result = abi.decode(abi.decode(returnData, (bytes)), (PoolSwapResult));
+    IZapUniswapV3Helper.PoolSwapResult memory result =
+      abi.decode(abi.decode(returnData, (bytes)), (IZapUniswapV3Helper.PoolSwapResult));
 
     state.amount0 = result.amount0ToAdd;
     state.amount1 = result.amount1ToAdd;

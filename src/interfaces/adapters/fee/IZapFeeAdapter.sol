@@ -48,14 +48,14 @@ interface IZapFeeAdapter is IAHV2Callee, ICommon {
   }
 
   /**
-   * @notice The denominator of the fee rates
-   * @return The denominator of the fee rates
+   * @notice Denominator of the fee rates
+   * @return The denominator
    */
   function FEE_DENOMINATOR() external view returns (uint256);
 
   /**
-   * @notice The flag that marks a solver fee value as a flat amount
-   * @return The bit that is set in a fee value to mark it as a flat amount
+   * @notice Flag that marks a solver fee value as a flat amount
+   * @return The bit set in a fee value to mark it as a flat amount
    */
   function FLAT_FEE_FLAG() external view returns (uint256);
 }

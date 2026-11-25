@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.35;
 
+import {IZapHelper} from '../interfaces/adapters/IZapHelper.sol';
 import {IZapLegacyPoolSwapHelper} from '../interfaces/adapters/IZapLegacyPoolSwapHelper.sol';
 import {IZapPoolSwapAgainHelper} from '../interfaces/adapters/IZapPoolSwapAgainHelper.sol';
-import {IZapPoolSwapHelper} from '../interfaces/adapters/IZapPoolSwapHelper.sol';
 import {MASK_BYTES_4} from '../libraries/BitMask.sol';
 import {PackedU128} from '../types/PackedU128.sol';
 
@@ -42,9 +42,7 @@ abstract contract ZapHelperCaller {
     bytes calldata solverData,
     bytes memory additionalData
   ) internal returns (bytes memory) {
-    bytes memory data = abi.encodeCall(
-      IZapPoolSwapHelper.poolSwap, (ownerData, solverData, additionalData)
-    );
+    bytes memory data = abi.encodeCall(IZapHelper.poolSwap, (ownerData, solverData, additionalData));
 
     return Address.functionDelegateCall(helper, data);
   }

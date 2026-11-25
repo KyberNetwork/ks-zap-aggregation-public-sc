@@ -17,16 +17,11 @@ import {ECDSA} from 'openzeppelin-contracts/contracts/utils/cryptography/ECDSA.s
  * @notice Callee that calls or delegatecalls a list of whitelisted callees in order, as a single
  * call of an order of the allowance hub
  * @dev Each callee has a `uint256` of call parameters, which holds its flags in the high bits and
- * its native value in the low 128 bits. {FLAG_CALL} makes this contract call the callee with the
- * value, sent from the native balance of this contract. Without the flag, the callee is
- * delegatecalled and its value is ignored. Every callee is invoked through
- * {IAHV2Callee-execute}. A delegatecalled callee reads the account it acts for from
- * {ISettlementContext-msgSender} of the hub. A call that this contract receives while a callee is
- * delegatecalled, such as a callback, is delegatecalled to that callee, which must check the
- * caller. This contract answers {ERC721Holder-onERC721Received} itself and does not delegatecall
- * it. The solver data of every callee is bound by the signature of an account holding
- * {SIGNER_ROLE} over the owner data, the solver data, the deadline, the chain, this contract and
- * the caller.
+ * its native value in the low 128 bits. A delegatecalled callee reads the account it acts for
+ * from {ISettlementContext-msgSender} of the hub. A call that this contract receives while a
+ * callee is delegatecalled, such as a callback, is delegatecalled to that callee, which must
+ * check the caller. {ERC721Holder-onERC721Received} is answered by this contract and is not
+ * delegatecalled.
  */
 contract AHV2ProxyCallee is IAHV2Callee, ERC721Holder, ManagementSimple {
   using Address for address;
@@ -53,7 +48,7 @@ contract AHV2ProxyCallee is IAHV2Callee, ERC721Holder, ManagementSimple {
   /// @notice Mask of the native value in the call parameters of a callee
   uint256 public constant VALUE_MASK = type(uint128).max;
 
-  /// @dev Transient slot holding the active callee, which is the callee being delegatecalled
+  /// @dev Transient slot holding the callee being delegatecalled
   bytes32 internal constant ACTIVE_CALLEE_SLOT =
     bytes32(erc7201('ks.zap.proxy-callee.active-callee'));
 
@@ -98,8 +93,7 @@ contract AHV2ProxyCallee is IAHV2Callee, ERC721Holder, ManagementSimple {
 
   /**
    * @inheritdoc IAHV2Callee
-   * @dev Callee `i` receives `execute(ownerData[i], solverData[i])`. A delegatecalled callee sees
-   * the full `msg.value`. The signature is verified before any callee runs.
+   * @dev A delegatecalled callee sees the full `msg.value`.
    * @param proxyOwnerData `abi.encode(address[] callees, uint256[] callParams, bytes[] ownerData)`,
    * where `callParams[i]` holds the flags and the value of `callees[i]`
    * @param proxySolverData `abi.encode(bytes[] solverData, uint256 deadline, bytes signature)`,
@@ -114,6 +108,7 @@ contract AHV2ProxyCallee is IAHV2Callee, ERC721Holder, ManagementSimple {
     whenNotPaused
     returns (bytes memory)
   {
+    // Callee `i` receives `execute(ownerData[i], solverData[i])`
     address[] calldata callees = proxyOwnerData.decodeAddressArray(0);
     uint256[] calldata callParams = proxyOwnerData.decodeUint256Array(1);
     bytes[] calldata ownerData = proxyOwnerData.decodeBytesArray(2);
@@ -125,6 +120,8 @@ contract AHV2ProxyCallee is IAHV2Callee, ERC721Holder, ManagementSimple {
     if (solverData.length != callees.length) {
       revert MismatchedArrayLengths();
     }
+
+    // The signature is verified before any callee runs
     _verifySignature(
       proxyOwnerData, solverData, proxySolverData.decodeUint256(1), proxySolverData.decodeBytes(2)
     );
@@ -139,19 +136,21 @@ contract AHV2ProxyCallee is IAHV2Callee, ERC721Holder, ManagementSimple {
   }
 
   /// @dev Calls `callee` with `data` and the value in `callParams`, or delegatecalls it with
-  /// `data` when {FLAG_CALL} is not set. A delegatecalled callee is recorded as the active callee
-  /// for the duration of the delegatecall, after which the previous active callee is restored.
+  /// `data` when {FLAG_CALL} is not set
   function _execute(address callee, uint256 callParams, bytes memory data)
     internal
     returns (bytes memory result)
   {
     _checkRole(WHITELISTED_CALLEE_ROLE, callee);
 
+    // With {FLAG_CALL}, the value is sent from the native balance of this contract
     if (callParams & FLAG_CALL != 0) {
       // forge-lint: disable-next-line(arbitrary-send-eth)
       return callee.functionCallWithValue(data, callParams & VALUE_MASK);
     }
 
+    // Without the flag, the value is ignored. The callee is the active callee for the duration of
+    // the delegatecall, after which the previous active callee is restored.
     TransientSlot.AddressSlot slot = ACTIVE_CALLEE_SLOT.asAddress();
     address previous = slot.tload();
     slot.tstore(callee);
@@ -171,6 +170,8 @@ contract AHV2ProxyCallee is IAHV2Callee, ERC721Holder, ManagementSimple {
       revert DeadlinePassed(deadline, block.timestamp);
     }
 
+    // The signed hash binds the solver data to the owner data, the deadline, the chain, this
+    // contract and the caller
     bytes32 hash = keccak256(
       abi.encode(block.chainid, address(this), msg.sender, deadline, proxyOwnerData, solverData)
     );

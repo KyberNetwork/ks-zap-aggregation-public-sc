@@ -2,7 +2,6 @@
 pragma solidity ^0.8.0;
 
 import {IZapAdapter} from '../IZapAdapter.sol';
-import {IZapUniswapV4BaseHelperTypes} from './IZapUniswapV4BaseHelperTypes.sol';
 
 import {PackedBits} from '../../../types/PackedBits.sol';
 import {PackedU128} from '../../../types/PackedU128.sol';
@@ -10,7 +9,7 @@ import {PoolKey} from '../../../vendors/uniswap-v4/PoolKey.sol';
 
 /// @title IZapUniswapV4BaseAdapter
 /// @notice Interface of {ZapUniswapV4BaseAdapter}
-interface IZapUniswapV4BaseAdapter is IZapAdapter, IZapUniswapV4BaseHelperTypes {
+interface IZapUniswapV4BaseAdapter is IZapAdapter {
   /// @notice Thrown when the first pass adds no liquidity or the liquidity added by the zap in is
   /// below `minLiquidity`
   error ZapInUniswapV4InsufficientLiquidity();

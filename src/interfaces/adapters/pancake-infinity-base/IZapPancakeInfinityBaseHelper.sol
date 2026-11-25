@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {PoolKey} from '../../../vendors/uniswap-v4/PoolKey.sol';
+import {PackedU128} from '../../../types/PackedU128.sol';
+import {IZapHelper} from '../IZapHelper.sol';
 
-/// @title IZapUniswapV4BaseHelperTypes
-/// @notice Events, parameters and results of the Uniswap V4 helper
-interface IZapUniswapV4BaseHelperTypes {
+/// @title IZapPancakeInfinityBaseHelper
+/// @notice Interface of {ZapPancakeInfinityBaseHelper}
+interface IZapPancakeInfinityBaseHelper is IZapHelper {
   /**
    * @notice Emitted when the helper swaps on the pool towards the ratio of the position, or adds
    * the amounts at the pool price when it swaps nothing
@@ -27,7 +28,7 @@ interface IZapUniswapV4BaseHelperTypes {
 
   /**
    * @notice The parameters that the adapter adds to the pool swap and to the preview of a zap
-   * into Uniswap V4
+   * into Pancake Infinity
    * @param amount0 The amount of currency0 to swap and add
    * @param amount1 The amount of currency1 to swap and add
    * @param useExtraData Whether the pool swap uses the extra data of the solver; the preview
@@ -40,7 +41,7 @@ interface IZapUniswapV4BaseHelperTypes {
   }
 
   /**
-   * @notice The result of previewing a zap into Uniswap V4
+   * @notice The result of previewing a zap into Pancake Infinity
    * @param sqrtPriceStartX96 The starting sqrt price
    * @param poolLiquidityStart The starting pool liquidity
    * @param sqrtPriceX96 The resulting sqrt price
@@ -62,7 +63,7 @@ interface IZapUniswapV4BaseHelperTypes {
   }
 
   /**
-   * @notice The result of the pool swap of a Uniswap V4 zap
+   * @notice The result of the pool swap of a Pancake Infinity zap
    * @param usedOffchainData Whether the off-chain data was used
    * @param liquidityToAdd The liquidity that the amounts to add give at the price after the swap
    * @param amount0ToAdd The amount of currency0 to add to the position after the swap
@@ -73,5 +74,35 @@ interface IZapUniswapV4BaseHelperTypes {
     uint128 liquidityToAdd;
     uint256 amount0ToAdd;
     uint256 amount1ToAdd;
+  }
+
+  /**
+   * @notice The result of previewing liquidity removal from Pancake Infinity
+   * @param amount0Fee The fee amount in token0
+   * @param amount1Fee The fee amount in token1
+   * @param amount0Principal The principal amount in token0
+   * @param amount1Principal The principal amount in token1
+   */
+  struct PreviewRemoveResult {
+    uint256 amount0Fee;
+    uint256 amount1Fee;
+    uint256 amount0Principal;
+    uint256 amount1Principal;
+  }
+
+  /**
+   * @notice The off-chain data for the swap
+   * @param sqrtPriceStartX96 The starting sqrt price
+   * @param poolLiquidityStart The starting pool liquidity
+   * @param amount0Range The range of token0
+   * @param amount1Range The range of token1
+   * @param sqrtPriceX96 The resulting sqrt price
+   */
+  struct OffchainData {
+    uint160 sqrtPriceStartX96;
+    uint128 poolLiquidityStart;
+    PackedU128 amount0Range;
+    PackedU128 amount1Range;
+    uint160 sqrtPriceX96;
   }
 }

@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-/// @title IZapUniswapV3HelperTypes
-/// @notice Events, parameters and results of the Uniswap V3 helper
-interface IZapUniswapV3HelperTypes {
+import {PackedU128} from '../../../types/PackedU128.sol';
+import {IZapHelper} from '../IZapHelper.sol';
+
+/// @title IZapUniswapV3Helper
+/// @notice Interface of {ZapUniswapV3Helper}
+interface IZapUniswapV3Helper is IZapHelper {
   /**
    * @notice Emitted when the helper swaps on the pool towards the ratio of the position, or adds
    * the amounts at the pool price when it swaps nothing
@@ -71,5 +74,35 @@ interface IZapUniswapV3HelperTypes {
     uint128 liquidityToAdd;
     uint256 amount0ToAdd;
     uint256 amount1ToAdd;
+  }
+
+  /**
+   * @notice The result of previewing liquidity removal from Uniswap V3
+   * @param amount0Fee The fee amount in token0
+   * @param amount1Fee The fee amount in token1
+   * @param amount0Principal The principal amount in token0
+   * @param amount1Principal The principal amount in token1
+   */
+  struct PreviewRemoveResult {
+    uint256 amount0Fee;
+    uint256 amount1Fee;
+    uint256 amount0Principal;
+    uint256 amount1Principal;
+  }
+
+  /**
+   * @notice The off-chain data for the swap
+   * @param sqrtPriceStartX96 The starting sqrt price
+   * @param poolLiquidityStart The starting pool liquidity
+   * @param amount0Range The range of token0
+   * @param amount1Range The range of token1
+   * @param sqrtPriceX96 The resulting sqrt price
+   */
+  struct OffchainData {
+    uint160 sqrtPriceStartX96;
+    uint128 poolLiquidityStart;
+    PackedU128 amount0Range;
+    PackedU128 amount1Range;
+    uint160 sqrtPriceX96;
   }
 }
