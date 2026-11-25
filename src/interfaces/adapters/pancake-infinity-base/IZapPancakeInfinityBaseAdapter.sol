@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+import {IKSZapExecutor} from '../../IKSZapExecutor.sol';
 import {IZapAdapter} from '../IZapAdapter.sol';
 import {IZapPancakeInfinityBaseHelperTypes} from './IZapPancakeInfinityBaseHelperTypes.sol';
 
@@ -10,7 +11,11 @@ import {PackedBits} from '../../../types/PackedBits.sol';
 
 /// @title IZapPancakeInfinityBaseAdapter
 /// @notice Interface of {ZapPancakeInfinityBaseAdapter}
-interface IZapPancakeInfinityBaseAdapter is IZapAdapter, IZapPancakeInfinityBaseHelperTypes {
+interface IZapPancakeInfinityBaseAdapter is
+  IZapAdapter,
+  IKSZapExecutor,
+  IZapPancakeInfinityBaseHelperTypes
+{
   /// @notice Thrown when the added liquidity is below the minimum
   error ZapInPancakeInfinityInsufficientLiquidity();
 

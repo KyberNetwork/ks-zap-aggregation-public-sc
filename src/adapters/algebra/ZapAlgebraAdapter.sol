@@ -6,18 +6,17 @@ import {ZapUniswapV3Adapter} from '../uniswap-v3/ZapUniswapV3Adapter.sol';
 import {IAlgebraV1_9BasePool} from '../../vendors/algebra-v1.9/IAlgebraV1_9BasePool.sol';
 import {IAlgebraV1_9NFT} from '../../vendors/algebra-v1.9/IAlgebraV1_9NFT.sol';
 
-import {Address} from 'openzeppelin-contracts/contracts/utils/Address.sol';
-
 /// @title ZapAlgebraAdapter
 /// @notice Adds liquidity to an Algebra V1.9 or Algebra Integral V1.0 position with the token
-/// balances this contract holds, when KSZapRouterV3 delegatecalls it in an owner call of an
-/// allowance hub fulfillment
+/// balances of the account that delegatecalls it, or removes liquidity from a position that
+/// account holds
 contract ZapAlgebraAdapter is ZapUniswapV3Adapter {
-  using Address for address;
-
+  /// @param _WETH The wrapped native token
   constructor(address _WETH) ZapUniswapV3Adapter(_WETH) {}
 
-  /// @dev Reads the leading price word of the `globalState` getter of the pool
+  /// @dev Staticcalls the `globalState` getter of the pool and returns the first word of its
+  /// return data, the sqrt price. Reverts with the return data of the pool when the call fails or
+  /// returns less than one word.
   function _getSqrtPriceX96(address pool)
     internal
     view
@@ -25,15 +24,20 @@ contract ZapAlgebraAdapter is ZapUniswapV3Adapter {
     override
     returns (uint160 sqrtPriceX96)
   {
-    bytes memory callData = abi.encodeWithSelector(IAlgebraV1_9BasePool.globalState.selector);
-    bytes memory returnData = pool.functionStaticCall(callData);
+    bytes4 selector = IAlgebraV1_9BasePool.globalState.selector;
     assembly ('memory-safe') {
-      sqrtPriceX96 := mload(add(returnData, 0x20))
+      mstore(0, selector)
+      let success := staticcall(gas(), pool, 0, 4, 0, 0x20)
+      if or(iszero(success), lt(returndatasize(), 0x20)) {
+        returndatacopy(0, 0, returndatasize())
+        revert(0, returndatasize())
+      }
+      sqrtPriceX96 := mload(0)
     }
   }
 
-  /// @dev Mints a new position to the recipient with the given amounts
-  function _mint(ZapInParams calldata params, ZapInState memory state)
+  /// @dev Mints a new position to the recipient with the amounts in `state`
+  function _mint(ZapInOwnerParams calldata params, ZapInState memory state)
     internal
     virtual
     override

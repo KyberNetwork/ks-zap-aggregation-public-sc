@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+import {IKSZapExecutor} from '../../IKSZapExecutor.sol';
 import {IZapAdapter} from '../IZapAdapter.sol';
 
 /// @title IZapCurveAdapter
 /// @notice Interface of {ZapCurveAdapter}
-interface IZapCurveAdapter is IZapAdapter {
+interface IZapCurveAdapter is IZapAdapter, IKSZapExecutor {
   /**
    * @notice The list of Curve pool types
    * @param STABLESWAP_NG The StableSwap NG pool type

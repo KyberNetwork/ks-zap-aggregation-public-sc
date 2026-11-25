@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+import {IKSZapExecutor} from '../../IKSZapExecutor.sol';
 import {IZapAdapter} from '../IZapAdapter.sol';
 import {IZapBrownFiV3HelperTypes} from './IZapBrownFiV3HelperTypes.sol';
 
 /// @title IZapBrownFiV3Adapter
 /// @notice Interface of {ZapBrownFiV3Adapter}
-interface IZapBrownFiV3Adapter is IZapAdapter, IZapBrownFiV3HelperTypes {
+interface IZapBrownFiV3Adapter is IZapAdapter, IKSZapExecutor, IZapBrownFiV3HelperTypes {
   /// @notice Thrown when the added liquidity is below the minimum
   error ZapInBrownFiV3InsufficientLiquidity();
 

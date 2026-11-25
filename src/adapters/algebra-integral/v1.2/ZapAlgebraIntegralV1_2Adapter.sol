@@ -10,19 +10,19 @@ import {CalldataDecoder} from 'ks-common-sc/src/libraries/calldata/CalldataDecod
 
 /**
  * @title ZapAlgebraIntegralV1_2Adapter
- * @notice Adds liquidity to an Algebra Integral V1.2 position with the token balances this
- * contract holds, when KSZapRouterV3 delegatecalls it in an owner call of an allowance hub
- * fulfillment
- * @dev `ZapInParams.extraData` is the ABI-encoded deployer of the pool
+ * @notice Adds liquidity to an Algebra Integral V1.2 position with the token balances of the
+ * account that delegatecalls it, or removes liquidity from a position that account holds
+ * @dev `ZapInOwnerParams.extraData` is the ABI-encoded address of the deployer of the pool
  */
 contract ZapAlgebraIntegralV1_2Adapter is ZapAlgebraAdapter {
   using CalldataDecoder for bytes;
 
+  /// @param _WETH The wrapped native token
   constructor(address _WETH) ZapAlgebraAdapter(_WETH) {}
 
-  /// @dev Mints a new position to the recipient with the given amounts for the pool of the
+  /// @dev Mints a new position to the recipient with the amounts in `state` for the pool of the
   /// deployer in `params.extraData`
-  function _mint(ZapInParams calldata params, ZapInState memory state)
+  function _mint(ZapInOwnerParams calldata params, ZapInState memory state)
     internal
     override
     returns (uint256 tokenId, uint256 liquidity, uint256 addedAmount0, uint256 addedAmount1)

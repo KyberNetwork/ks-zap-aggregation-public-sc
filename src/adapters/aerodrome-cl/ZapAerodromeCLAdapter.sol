@@ -4,31 +4,18 @@ pragma solidity 0.8.38;
 import {ZapUniswapV3Adapter} from '../uniswap-v3/ZapUniswapV3Adapter.sol';
 
 import {IAerodromeCLNFT} from '../../vendors/aerodrome-cl/IAerodromeCLNFT.sol';
-import {IAerodromeCLPool} from '../../vendors/aerodrome-cl/IAerodromeCLPool.sol';
 import {IUniswapV3Pool} from '../../vendors/uniswap-v3/IUniswapV3Pool.sol';
 
-import {Address} from 'openzeppelin-contracts/contracts/utils/Address.sol';
-
 /// @title ZapAerodromeCLAdapter
-/// @notice Adds liquidity to an Aerodrome CL position with the token balances this contract holds,
-/// when KSZapRouterV3 delegatecalls it in an owner call of an allowance hub fulfillment
+/// @notice Adds liquidity to an Aerodrome CL position with the token balances of the account that
+/// delegatecalls it, or removes liquidity from a position that account holds
 contract ZapAerodromeCLAdapter is ZapUniswapV3Adapter {
-  using Address for address;
-
+  /// @param _WETH The wrapped native token
   constructor(address _WETH) ZapUniswapV3Adapter(_WETH) {}
 
-  /// @dev Reads the leading price word of the `slot0` getter of the pool
-  function _getSqrtPriceX96(address pool) internal view override returns (uint160 sqrtPriceX96) {
-    bytes memory callData = abi.encodeWithSelector(IAerodromeCLPool.slot0.selector);
-    bytes memory returnData = pool.functionStaticCall(callData);
-    assembly ('memory-safe') {
-      sqrtPriceX96 := mload(add(returnData, 0x20))
-    }
-  }
-
-  /// @dev Mints a new position to the recipient with the given amounts at the tick spacing of the
-  /// pool
-  function _mint(ZapInParams calldata params, ZapInState memory state)
+  /// @dev Mints a new position to the recipient with the amounts in `state` at the tick spacing of
+  /// the pool
+  function _mint(ZapInOwnerParams calldata params, ZapInState memory state)
     internal
     override
     returns (uint256 tokenId, uint256 liquidity, uint256 addedAmount0, uint256 addedAmount1)

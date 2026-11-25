@@ -8,7 +8,7 @@ import {
 } from '../../interfaces/adapters/pancake-infinity-base/IZapPancakeInfinityBaseAdapter.sol';
 
 import {ImmutableState} from '../../base/ImmutableState.sol';
-import {ZapAgainHelperCaller} from '../../base/ZapAgainHelperCaller.sol';
+import {ZapHelperCaller} from '../../base/ZapHelperCaller.sol';
 import {CommonLibrary} from '../../libraries/CommonLibrary.sol';
 import {ZapAgainRecord} from '../../libraries/ZapAgainRecord.sol';
 
@@ -35,7 +35,7 @@ import {IERC721} from 'openzeppelin-contracts/contracts/token/ERC721/IERC721.sol
 contract ZapPancakeInfinityBaseAdapter is
   IZapPancakeInfinityBaseAdapter,
   ImmutableState,
-  ZapAgainHelperCaller
+  ZapHelperCaller
 {
   using TokenHelper for address;
   using CommonLibrary for *;

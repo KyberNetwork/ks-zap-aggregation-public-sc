@@ -6,7 +6,7 @@ import {IZapPoolSwapAgainHelper} from '../../interfaces/adapters/IZapPoolSwapAga
 import {IZapArrakisV2Adapter} from '../../interfaces/adapters/arrakis-v2/IZapArrakisV2Adapter.sol';
 
 import {ImmutableState} from '../../base/ImmutableState.sol';
-import {ZapAgainHelperCaller} from '../../base/ZapAgainHelperCaller.sol';
+import {ZapHelperCaller} from '../../base/ZapHelperCaller.sol';
 import {CommonLibrary} from '../../libraries/CommonLibrary.sol';
 import {ZapAgainRecord} from '../../libraries/ZapAgainRecord.sol';
 import {IArrakisV2Router} from '../../vendors/arrakis-v2/IArrakisV2Router.sol';
@@ -20,7 +20,7 @@ import {TokenHelper} from 'ks-common-sc/src/libraries/token/TokenHelper.sol';
 /// KSZapRouterV3 delegatecalls it in an owner call of an allowance hub fulfillment
 /// @dev The contract holds no tokens between transactions. 1 wei of each token is retained. The
 /// swap callbacks of the zap again are forwarded to the helper.
-contract ZapArrakisV2Adapter is IZapArrakisV2Adapter, ImmutableState, ZapAgainHelperCaller {
+contract ZapArrakisV2Adapter is IZapArrakisV2Adapter, ImmutableState, ZapHelperCaller {
   using TokenHelper for address;
   using CommonLibrary for *;
 

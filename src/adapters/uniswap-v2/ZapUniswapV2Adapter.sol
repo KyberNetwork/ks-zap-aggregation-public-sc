@@ -7,7 +7,7 @@ import {IZapUniswapV2Adapter} from '../../interfaces/adapters/uniswap-v2/IZapUni
 
 import {AddLiquidityPreviewHelperCaller} from '../../base/AddLiquidityPreviewHelperCaller.sol';
 import {ImmutableState} from '../../base/ImmutableState.sol';
-import {ZapAgainHelperCaller} from '../../base/ZapAgainHelperCaller.sol';
+import {ZapHelperCaller} from '../../base/ZapHelperCaller.sol';
 import {AddLiquidityPreviewRecord} from '../../libraries/AddLiquidityPreviewRecord.sol';
 import {CommonLibrary} from '../../libraries/CommonLibrary.sol';
 import {ZapAgainRecord} from '../../libraries/ZapAgainRecord.sol';
@@ -27,7 +27,7 @@ contract ZapUniswapV2Adapter is
   IZapUniswapV2Adapter,
   ImmutableState,
   AddLiquidityPreviewHelperCaller,
-  ZapAgainHelperCaller
+  ZapHelperCaller
 {
   using TokenHelper for address;
   using CommonLibrary for *;

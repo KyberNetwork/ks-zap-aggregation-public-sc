@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+import {IKSZapExecutor} from '../../IKSZapExecutor.sol';
 import {IZapAdapter} from '../IZapAdapter.sol';
 import {IZapArrakisV2HelperTypes} from './IZapArrakisV2HelperTypes.sol';
 
@@ -8,7 +9,7 @@ import {PackedBits} from '../../../types/PackedBits.sol';
 
 /// @title IZapArrakisV2Adapter
 /// @notice Interface of {ZapArrakisV2Adapter}
-interface IZapArrakisV2Adapter is IZapAdapter, IZapArrakisV2HelperTypes {
+interface IZapArrakisV2Adapter is IZapAdapter, IKSZapExecutor, IZapArrakisV2HelperTypes {
   /// @notice Thrown when the shares minted are below the minimum
   error ZapArrakisV2InsufficientShares();
 

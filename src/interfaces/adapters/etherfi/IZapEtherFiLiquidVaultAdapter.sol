@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+import {IKSZapExecutor} from '../../IKSZapExecutor.sol';
 import {IZapAdapter} from '../IZapAdapter.sol';
 
 /// @title IZapEtherFiLiquidVaultAdapter
 /// @notice Interface of {ZapEtherFiLiquidVaultAdapter}
-interface IZapEtherFiLiquidVaultAdapter is IZapAdapter {
+interface IZapEtherFiLiquidVaultAdapter is IZapAdapter, IKSZapExecutor {
   /**
    * @notice Parameters of the zap in
    * @param liquidRefer The LiquidRefer deposit router

@@ -8,7 +8,7 @@ import {
 } from '../../interfaces/adapters/uniswap-v4-base/IZapUniswapV4BaseAdapter.sol';
 
 import {ImmutableState} from '../../base/ImmutableState.sol';
-import {ZapAgainHelperCaller} from '../../base/ZapAgainHelperCaller.sol';
+import {ZapHelperCaller} from '../../base/ZapHelperCaller.sol';
 import {CommonLibrary} from '../../libraries/CommonLibrary.sol';
 import {ZapAgainRecord} from '../../libraries/ZapAgainRecord.sol';
 import {Actions} from '../../vendors/uniswap-v4/Actions.sol';
@@ -30,7 +30,7 @@ import {IERC721} from 'openzeppelin-contracts/contracts/token/ERC721/IERC721.sol
 /// when KSZapRouterV3 delegatecalls it in an owner call of an allowance hub fulfillment
 /// @dev The contract holds no tokens between transactions. 1 wei of each token is retained. A new
 /// position is minted to this contract and transferred to the recipient after the unlock.
-contract ZapUniswapV4BaseAdapter is IZapUniswapV4BaseAdapter, ImmutableState, ZapAgainHelperCaller {
+contract ZapUniswapV4BaseAdapter is IZapUniswapV4BaseAdapter, ImmutableState, ZapHelperCaller {
   using TokenHelper for address;
   using CommonLibrary for *;
   using StateLibrary for IPoolManager;

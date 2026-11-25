@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+import {IKSZapExecutor} from '../../IKSZapExecutor.sol';
 import {IZapAdapter} from '../IZapAdapter.sol';
 import {IZapUniswapV4BaseHelperTypes} from './IZapUniswapV4BaseHelperTypes.sol';
 
@@ -9,7 +10,7 @@ import {PoolKey} from '../../../vendors/uniswap-v4/PoolKey.sol';
 
 /// @title IZapUniswapV4BaseAdapter
 /// @notice Interface of {ZapUniswapV4BaseAdapter}
-interface IZapUniswapV4BaseAdapter is IZapAdapter, IZapUniswapV4BaseHelperTypes {
+interface IZapUniswapV4BaseAdapter is IZapAdapter, IKSZapExecutor, IZapUniswapV4BaseHelperTypes {
   /// @notice Thrown when the added liquidity is below the minimum
   error ZapInUniswapV4InsufficientLiquidity();
 
