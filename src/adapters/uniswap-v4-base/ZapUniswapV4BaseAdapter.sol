@@ -35,8 +35,8 @@ import {IERC721} from 'openzeppelin-contracts/contracts/token/ERC721/IERC721.sol
  * delegatecalls it, or removes liquidity from a position that account holds
  * @dev AHV2ProxyCallee delegatecalls the adapter, so the balances and the positions are those of
  * the proxy. Adding liquidity runs inside one unlock of the pool manager. The tokens are approved
- * on the Permit2 contract set at construction. The callbacks of other pools are delegatecalled to
- * the targets that the optimizers register.
+ * on the Permit2 contract that the solver parameters name. The callbacks of other pools are
+ * delegatecalled to the targets that the optimizers register.
  */
 contract ZapUniswapV4BaseAdapter is
   IZapUniswapV4BaseAdapter,
@@ -60,16 +60,8 @@ contract ZapUniswapV4BaseAdapter is
     uint256 amount1;
   }
 
-  /// @dev The Permit2 contract through which the position manager pulls the tokens
-  IAllowanceTransfer internal immutable PERMIT2;
-
-  /**
-   * @param _WETH The wrapped native token
-   * @param _permit2 The Permit2 contract of the chain
-   */
-  constructor(address _WETH, address _permit2) ImmutableState(_WETH) {
-    PERMIT2 = IAllowanceTransfer(_permit2);
-  }
+  /// @param _WETH The wrapped native token
+  constructor(address _WETH) ImmutableState(_WETH) {}
 
   /// @dev Allows the contract to receive native tokens
   receive() external payable {}
@@ -129,11 +121,12 @@ contract ZapUniswapV4BaseAdapter is
     }
 
     if (solverParams.approvalFlags.at(0) || solverParams.approvalFlags.at(1)) {
+      IAllowanceTransfer permit2 = IAllowanceTransfer(solverParams.permit2);
       if (solverParams.approvalFlags.at(0)) {
-        CommonLibrary.permit2ApproveInf(params.poolKey.currency0, params.posManager, PERMIT2);
+        CommonLibrary.permit2ApproveInf(params.poolKey.currency0, params.posManager, permit2);
       }
       if (solverParams.approvalFlags.at(1)) {
-        CommonLibrary.permit2ApproveInf(params.poolKey.currency1, params.posManager, PERMIT2);
+        CommonLibrary.permit2ApproveInf(params.poolKey.currency1, params.posManager, permit2);
       }
     }
 

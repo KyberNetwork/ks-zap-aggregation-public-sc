@@ -11,7 +11,8 @@ import {Address} from 'openzeppelin-contracts/contracts/utils/Address.sol';
 
 /**
  * @title ZapSwapAdapter
- * @notice Swaps the token balances of the account that delegatecalls it through a swap target
+ * @notice Swaps the token and native balances of the account that delegatecalls it through a swap
+ * target
  */
 contract ZapSwapAdapter is IZapSwapAdapter {
   using TokenHelper for address;
@@ -21,7 +22,8 @@ contract ZapSwapAdapter is IZapSwapAdapter {
    * @inheritdoc IAHV2Callee
    * @dev `ownerData` is ignored. `solverData` is either empty, in which case nothing runs, or
    * `abi.encode(SwapSolverParams)`. A failed swap reverts with the revert data of the swap target,
-   * or with {Errors-FailedCall} when there is none.
+   * or with {Errors-FailedCall} when there is none. A native swap above the native balance reverts
+   * with {Errors-InsufficientBalance}.
    * @return Empty bytes
    */
   function execute(bytes calldata, bytes calldata solverData)
@@ -61,7 +63,9 @@ contract ZapSwapAdapter is IZapSwapAdapter {
 
     address token = tokenParams.token.addressValue();
     bool approvalFlag = tokenParams.token.boolValue();
-    if (approvalFlag) {
+    // The native token is sent as the value of each swap and is not approved
+    bool nativeInput = token.isNative();
+    if (approvalFlag && !nativeInput) {
       token.forceApprove(swapTarget, type(uint256).max);
     }
 
@@ -91,8 +95,14 @@ contract ZapSwapAdapter is IZapSwapAdapter {
         scaledData = tokenParams.swapData[i];
       }
 
-      // No native value is sent to the swap target
-      swapTarget.functionCall(scaledData);
+      // A native input sends the scaled amount as the value of the call; an ERC20 input sends no
+      // native value
+      if (nativeInput) {
+        // forge-lint: disable-next-line(arbitrary-send-eth)
+        swapTarget.functionCallWithValue(scaledData, scaledAmount);
+      } else {
+        swapTarget.functionCall(scaledData);
+      }
 
       currentBalance -= scaledAmount;
       expectedBalance -= expectedAmount;

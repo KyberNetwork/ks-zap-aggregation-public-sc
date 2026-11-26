@@ -68,8 +68,10 @@ interface IZapUniswapV4BaseAdapter is IZapAdapter {
    * pass uses the same parameters without `extraData`.
    * @param minZapInAmounts The minimum balances of currency0 and currency1 left after the first
    * addition; the second pass runs when either balance is at least its minimum
-   * @param approvalFlags Bit 0 and bit 1 set approve Permit2 for the maximum amount of currency0
-   * and currency1 and approve the position manager on Permit2
+   * @param approvalFlags Bit 0 and bit 1 set approve `permit2` for the maximum amount of currency0
+   * and currency1 and approve the position manager on `permit2`
+   * @param permit2 The Permit2 contract through which the position manager pulls the currencies;
+   * read only when an approval flag is set
    * @param readBalanceFlag Settles the amounts to the pool manager before adding and reads the
    * resulting deltas and balances, for fee-on-transfer tokens
    * @param helper The helper that is delegatecalled for the pool swaps of both passes; it is
@@ -79,6 +81,7 @@ interface IZapUniswapV4BaseAdapter is IZapAdapter {
     UniswapV4PoolSwapParams poolSwap;
     PackedU128 minZapInAmounts;
     PackedBits approvalFlags;
+    address permit2;
     bool readBalanceFlag;
     address helper;
   }

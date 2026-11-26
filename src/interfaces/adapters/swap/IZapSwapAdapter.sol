@@ -25,7 +25,8 @@ interface IZapSwapAdapter is IAHV2Callee, ICommon {
 
   /**
    * @notice Parameters of the swaps of one token
-   * @param token The token, and whether to approve the swap target for the maximum amount
+   * @param token The token, the native token for the native balance, and whether to approve the
+   * swap target for the maximum amount; the flag is ignored for the native token
    * @param minScaleAmount The balance from which the swaps are scaled when it is above the
    * expected balance
    * @param scaleTypes The packed {ScaleType} of each swap

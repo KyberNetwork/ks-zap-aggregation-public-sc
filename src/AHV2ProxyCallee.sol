@@ -4,7 +4,6 @@ pragma solidity 0.8.38;
 import {IAHV2Callee} from 'ks-allowance-hub/src/interfaces/base/IAHV2Callee.sol';
 
 import {ManagementSimple} from 'ks-common-sc/src/base/ManagementSimple.sol';
-import {KSRoles} from 'ks-common-sc/src/libraries/KSRoles.sol';
 import {CalldataDecoder} from 'ks-common-sc/src/libraries/calldata/CalldataDecoder.sol';
 
 import {ERC721Holder} from 'openzeppelin-contracts/contracts/token/ERC721/utils/ERC721Holder.sol';
@@ -14,14 +13,15 @@ import {ECDSA} from 'openzeppelin-contracts/contracts/utils/cryptography/ECDSA.s
 
 /**
  * @title AHV2ProxyCallee
- * @notice Callee that calls or delegatecalls a list of whitelisted callees in order, as a single
- * call of an order of the allowance hub
- * @dev Each callee has a `uint256` of call parameters, which holds its flags in the high bits and
- * its native value in the low 128 bits. A delegatecalled callee reads the account it acts for
- * from {ISettlementContext-msgSender} of the hub. A call that this contract receives while a
- * callee is delegatecalled, such as a callback, is delegatecalled to that callee, which must
- * check the caller. {ERC721Holder-onERC721Received} is answered by this contract and is not
- * delegatecalled.
+ * @notice Callee that calls or delegatecalls a list of callees in order, as a single call of an
+ * order of the allowance hub
+ * @dev The callees and their owner and solver data are authorized by the signature of an account
+ * holding {SIGNER_ROLE}; any callee they name runs. Each callee has a `uint256` of call
+ * parameters, which holds its flags in the high bits and its native value in the low 128 bits. A
+ * delegatecalled callee reads the account it acts for from {ISettlementContext-msgSender} of the
+ * hub. A call that this contract receives while a callee is delegatecalled, such as a callback, is
+ * delegatecalled to that callee, which must check the caller. {ERC721Holder-onERC721Received} is
+ * answered by this contract and is not delegatecalled.
  */
 contract AHV2ProxyCallee is IAHV2Callee, ERC721Holder, ManagementSimple {
   using Address for address;
@@ -39,9 +39,6 @@ contract AHV2ProxyCallee is IAHV2Callee, ERC721Holder, ManagementSimple {
   /// @notice Role the signer of the solver data must hold on this contract
   bytes32 public constant SIGNER_ROLE = keccak256('SIGNER_ROLE');
 
-  /// @notice Role a callee must hold on this contract
-  bytes32 public constant WHITELISTED_CALLEE_ROLE = keccak256('WHITELISTED_CALLEE_ROLE');
-
   /// @notice Flag of a callee that is called rather than delegatecalled
   uint256 public constant FLAG_CALL = 1 << 255;
 
@@ -53,21 +50,16 @@ contract AHV2ProxyCallee is IAHV2Callee, ERC721Holder, ManagementSimple {
     bytes32(erc7201('ks.zap.proxy-callee.active-callee'));
 
   /**
-   * @dev Guardians may revoke a callee from {WHITELISTED_CALLEE_ROLE} without the admin.
    * @param initialAdmin Account granted the default admin role
    * @param initialGuardians Accounts granted the guardian role
-   * @param initialWhitelistedCallees Callees granted {WHITELISTED_CALLEE_ROLE}
    * @param initialSigners Accounts granted {SIGNER_ROLE}
    */
   constructor(
     address initialAdmin,
     address[] memory initialGuardians,
-    address[] memory initialWhitelistedCallees,
     address[] memory initialSigners
   ) ManagementSimple(initialAdmin, initialGuardians) {
-    _batchGrantRole(WHITELISTED_CALLEE_ROLE, initialWhitelistedCallees);
     _batchGrantRole(SIGNER_ROLE, initialSigners);
-    _setRoleRevoker(WHITELISTED_CALLEE_ROLE, KSRoles.GUARDIAN_ROLE);
   }
 
   /// @notice Delegatecalls the active callee with the calldata received
@@ -141,8 +133,6 @@ contract AHV2ProxyCallee is IAHV2Callee, ERC721Holder, ManagementSimple {
     internal
     returns (bytes memory result)
   {
-    _checkRole(WHITELISTED_CALLEE_ROLE, callee);
-
     // With {FLAG_CALL}, the value is sent from the native balance of this contract
     if (callParams & FLAG_CALL != 0) {
       // forge-lint: disable-next-line(arbitrary-send-eth)
