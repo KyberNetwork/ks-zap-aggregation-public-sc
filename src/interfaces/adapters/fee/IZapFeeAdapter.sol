@@ -30,7 +30,7 @@ interface IZapFeeAdapter is IAHV2Callee, ICommon {
   /**
    * @notice The maximum fee rate of a recipient
    * @param recipient The recipient of the fee
-   * @param maxFeeRate The maximum fee rate, out of `FEE_DENOMINATOR`
+   * @param maxFeeRate The maximum fee rate, out of 1,000,000
    */
   struct FeeCap {
     address recipient;
@@ -46,16 +46,4 @@ interface IZapFeeAdapter is IAHV2Callee, ICommon {
     address token;
     FeeCap[] caps;
   }
-
-  /**
-   * @notice Denominator of the fee rates
-   * @return The denominator
-   */
-  function FEE_DENOMINATOR() external view returns (uint256);
-
-  /**
-   * @notice Flag that marks a solver fee value as a flat amount
-   * @return The bit set in a fee value to mark it as a flat amount
-   */
-  function FLAT_FEE_FLAG() external view returns (uint256);
 }

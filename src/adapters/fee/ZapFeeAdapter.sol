@@ -13,17 +13,18 @@ import {TokenHelper} from 'ks-common-sc/src/libraries/token/TokenHelper.sol';
 contract ZapFeeAdapter is IZapFeeAdapter {
   using TokenHelper for address;
 
-  /// @inheritdoc IZapFeeAdapter
-  uint256 public constant FEE_DENOMINATOR = 1_000_000;
+  /// @dev Denominator of the fee rates
+  uint256 internal constant FEE_DENOMINATOR = 1_000_000;
 
-  /// @inheritdoc IZapFeeAdapter
-  uint256 public constant FLAT_FEE_FLAG = 1 << 255;
+  /// @dev Bit that marks a solver fee value as a flat amount
+  uint256 internal constant FLAT_FEE_FLAG = 1 << 255;
 
   /**
    * @inheritdoc IAHV2Callee
    * @dev `ownerData` is `abi.encode(TokenFeeCaps[])`. `solverData` is either empty, in which case
    * no fee is taken, or `abi.encode(uint256[][] fees)`, where `fees[i][j]` is the fee of `caps[j]`
-   * of the token entry `i`.
+   * of the token entry `i`. A fee with bit 255 set is a flat amount held in the other bits;
+   * otherwise it is a rate out of 1,000,000.
    * @return The amounts transferred, as `abi.encode(uint256[][])` with one amount per cap of each
    * token entry
    */
