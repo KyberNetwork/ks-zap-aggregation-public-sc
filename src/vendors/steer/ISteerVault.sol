@@ -9,4 +9,8 @@ interface ISteerVault {
     uint256 amount1Min,
     address recipient
   ) external returns (uint256 shares, uint256 amount0Used, uint256 amount1Used);
+
+  function withdraw(uint256 shares, uint256 amount0Min, uint256 amount1Min, address to)
+    external
+    returns (uint256 amount0, uint256 amount1);
 }

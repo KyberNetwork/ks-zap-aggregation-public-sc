@@ -5,26 +5,22 @@ import {ZapGammaAdapter} from './ZapGammaAdapter.sol';
 
 import {IUniProxyETH} from '../../vendors/gamma/IUniProxyETH.sol';
 
-import {CommonLibrary} from '../../libraries/CommonLibrary.sol';
-
 /// @title ZapGammaAlgebraIntegralAdapter
-/// @notice Deposits into a Gamma vault on Algebra Integral with the token balances this contract
-/// holds, when KSZapRouterV3 delegatecalls it in an owner call of an allowance hub fulfillment
-/// @dev The contract holds no tokens between transactions. 1 wei of each token is retained. The
-/// swap callbacks of the zap again are forwarded to the helper.
+/// @notice Deposits the token balances of the account that delegatecalls it into a Gamma vault on
+/// Algebra Integral, or removes vault shares that account holds
 contract ZapGammaAlgebraIntegralAdapter is ZapGammaAdapter {
-  using CommonLibrary for *;
-
   /// @dev The maximum slippage of the deposit, in basis points
   uint256 internal constant MAX_SLIPPAGE_BPS = 10_000;
 
+  /// @param _WETH The wrapped native token
   constructor(address _WETH) ZapGammaAdapter(_WETH) {}
 
-  /// @dev Deposits the given amounts through the UniProxy, minting the shares to the recipient
-  function _deposit(ZapInParams calldata params, ZapInState memory state)
+  /// @dev Calls the deposit of the UniProxy for Algebra Integral with the amounts in `state` and
+  /// the maximum slippage, and returns the shares
+  function _depositThroughProxy(ZapInOwnerParams calldata params, ZapInState memory state)
     internal
     override
-    returns (uint256 shares, uint256 addedAmount0, uint256 addedAmount1)
+    returns (uint256 shares)
   {
     shares = IUniProxyETH(params.router)
       .deposit(
@@ -35,8 +31,5 @@ contract ZapGammaAlgebraIntegralAdapter is ZapGammaAdapter {
         [uint256(0), 0, 0, 0],
         MAX_SLIPPAGE_BPS
       );
-
-    addedAmount0 = state.amount0 - state.token0.selfBalanceMinusOne();
-    addedAmount1 = state.amount1 - state.token1.selfBalanceMinusOne();
   }
 }

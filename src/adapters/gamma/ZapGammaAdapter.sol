@@ -1,39 +1,63 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.35;
 
-import {ZapArrakisV2Adapter} from '../arrakis-v2/ZapArrakisV2Adapter.sol';
+import {ZapVaultAdapter} from '../vault/ZapVaultAdapter.sol';
 
+import {IHypervisor} from '../../vendors/gamma/IHypervisor.sol';
 import {IUniProxy} from '../../vendors/gamma/IUniProxy.sol';
 
-import {CommonLibrary} from '../../libraries/CommonLibrary.sol';
+import {TokenHelper} from 'ks-common-sc/src/libraries/token/TokenHelper.sol';
 
 /// @title ZapGammaAdapter
-/// @notice Deposits into a Gamma vault on Uniswap V3, Algebra Base, Algebra Directional Fees or
-/// Ramses V2 with the token balances this contract holds, when KSZapRouterV3 delegatecalls it in an
-/// owner call of an allowance hub fulfillment
-/// @dev The contract holds no tokens between transactions. 1 wei of each token is retained. The
-/// swap callbacks of the zap again are forwarded to the helper.
-contract ZapGammaAdapter is ZapArrakisV2Adapter {
-  using CommonLibrary for *;
+/// @notice Deposits the token balances of the account that delegatecalls it into a Gamma vault on
+/// Uniswap V3, Algebra Base, Algebra Directional Fees or Ramses V2, or removes vault shares that
+/// account holds
+contract ZapGammaAdapter is ZapVaultAdapter {
+  using TokenHelper for address;
 
-  constructor(address _WETH) ZapArrakisV2Adapter(_WETH) {}
+  /// @param _WETH The wrapped native token
+  constructor(address _WETH) ZapVaultAdapter(_WETH) {}
 
-  /// @dev Deposits the given amounts through the UniProxy, minting the shares to the recipient
-  function _deposit(ZapInParams calldata params, ZapInState memory state)
+  /// @dev Deposits the amounts in `state` through the UniProxy, which mints the shares to the
+  /// recipient; the deposited amounts are the balance decreases of the deposit
+  function _deposit(ZapInOwnerParams calldata params, ZapInState memory state)
     internal
-    virtual
     override
     returns (uint256 shares, uint256 addedAmount0, uint256 addedAmount1)
   {
+    uint256 balance0Before = state.token0.selfBalance();
+    uint256 balance1Before = state.token1.selfBalance();
+
+    shares = _depositThroughProxy(params, state);
+
+    addedAmount0 = balance0Before - state.token0.selfBalance();
+    addedAmount1 = balance1Before - state.token1.selfBalance();
+  }
+
+  /// @dev Calls the deposit of the UniProxy with the amounts in `state` and returns the shares
+  function _depositThroughProxy(ZapInOwnerParams calldata params, ZapInState memory state)
+    internal
+    virtual
+    returns (uint256 shares)
+  {
     shares = IUniProxy(params.router)
       .deposit(state.amount0, state.amount1, params.recipient, params.vault, [uint256(0), 0, 0, 0]);
-
-    addedAmount0 = state.amount0 - state.token0.selfBalanceMinusOne();
-    addedAmount1 = state.amount1 - state.token1.selfBalanceMinusOne();
   }
 
   /// @dev Returns the vault, which pulls the tokens of the deposit
-  function _approveTarget(ZapInParams calldata params) internal pure override returns (address) {
+  function _approveTarget(ZapInOwnerParams calldata params)
+    internal
+    pure
+    override
+    returns (address)
+  {
     return params.vault;
+  }
+
+  /// @dev Burns the shares of the proxy through the hypervisor, which transfers the tokens to the
+  /// proxy
+  function _withdraw(RemoveOwnerParams calldata params) internal override {
+    uint256[4] memory minAmounts;
+    IHypervisor(params.vault).withdraw(params.shares, address(this), address(this), minAmounts);
   }
 }
