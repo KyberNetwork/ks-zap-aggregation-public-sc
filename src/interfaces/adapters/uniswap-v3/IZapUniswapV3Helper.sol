@@ -13,17 +13,19 @@ interface IZapUniswapV3Helper is IZapHelper {
    * @param originalAmount0 The amount of token0 before the swap
    * @param originalAmount1 The amount of token1 before the swap
    * @param usedOffchainData Whether the off-chain data was used
-   * @param liquidityToAdd The liquidity that the amounts to add give at the price after the swap
-   * @param amount0ToAdd The amount of token0 to add to the position after the swap
-   * @param amount1ToAdd The amount of token1 to add to the position after the swap
+   * @param liquidityToAdd The liquidity that the balances after the swap give at the pool price
+   * @param amount0AfterSwap The balance of token0 after the swap,
+   * which the adapter passes to the position manager as the desired amount
+   * @param amount1AfterSwap The balance of token1 after the swap,
+   * which the adapter passes to the position manager as the desired amount
    */
   event PoolSwap(
     uint256 originalAmount0,
     uint256 originalAmount1,
     bool usedOffchainData,
     uint128 liquidityToAdd,
-    uint256 amount0ToAdd,
-    uint256 amount1ToAdd
+    uint256 amount0AfterSwap,
+    uint256 amount1AfterSwap
   );
 
   /**
@@ -65,15 +67,17 @@ interface IZapUniswapV3Helper is IZapHelper {
   /**
    * @notice The result of the pool swap of a Uniswap V3 zap
    * @param usedOffchainData Whether the off-chain data was used
-   * @param liquidityToAdd The liquidity that the amounts to add give at the price after the swap
-   * @param amount0ToAdd The amount of token0 to add to the position after the swap
-   * @param amount1ToAdd The amount of token1 to add to the position after the swap
+   * @param liquidityToAdd The liquidity that the balances after the swap give at the pool price
+   * @param amount0AfterSwap The balance of token0 after the swap,
+   * which the adapter passes to the position manager as the desired amount
+   * @param amount1AfterSwap The balance of token1 after the swap,
+   * which the adapter passes to the position manager as the desired amount
    */
   struct PoolSwapResult {
     bool usedOffchainData;
     uint128 liquidityToAdd;
-    uint256 amount0ToAdd;
-    uint256 amount1ToAdd;
+    uint256 amount0AfterSwap;
+    uint256 amount1AfterSwap;
   }
 
   /**

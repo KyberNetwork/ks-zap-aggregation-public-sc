@@ -8,6 +8,7 @@ import {
   IZapUniswapV4BaseHelper
 } from '../../interfaces/adapters/uniswap-v4-base/IZapUniswapV4BaseHelper.sol';
 
+import {CallbackDispatcher} from '../../base/CallbackDispatcher.sol';
 import {ImmutableState} from '../../base/ImmutableState.sol';
 import {ZapHelperCaller} from '../../base/ZapHelperCaller.sol';
 import {CommonLibrary} from '../../libraries/CommonLibrary.sol';
@@ -34,9 +35,15 @@ import {IERC721} from 'openzeppelin-contracts/contracts/token/ERC721/IERC721.sol
  * delegatecalls it, or removes liquidity from a position that account holds
  * @dev AHV2ProxyCallee delegatecalls the adapter, so the balances and the positions are those of
  * the proxy. Adding liquidity runs inside one unlock of the pool manager. The tokens are approved
- * on the Permit2 contract set at construction.
+ * on the Permit2 contract set at construction. The callbacks of other pools are delegatecalled to
+ * the targets that the optimizers register.
  */
-contract ZapUniswapV4BaseAdapter is IZapUniswapV4BaseAdapter, ImmutableState, ZapHelperCaller {
+contract ZapUniswapV4BaseAdapter is
+  IZapUniswapV4BaseAdapter,
+  ImmutableState,
+  ZapHelperCaller,
+  CallbackDispatcher
+{
   using TokenHelper for address;
   using CommonLibrary for *;
   using CalldataDecoder for bytes;
@@ -66,6 +73,15 @@ contract ZapUniswapV4BaseAdapter is IZapUniswapV4BaseAdapter, ImmutableState, Za
 
   /// @dev Allows the contract to receive native tokens
   receive() external payable {}
+
+  /**
+   * @notice Delegatecalls a callback to the target registered for its selector
+   * @param data The calldata
+   * @return The return data of the target
+   */
+  fallback(bytes calldata data) external returns (bytes memory) {
+    return _fallback(data);
+  }
 
   /**
    * @inheritdoc IAHV2Callee
@@ -147,8 +163,8 @@ contract ZapUniswapV4BaseAdapter is IZapUniswapV4BaseAdapter, ImmutableState, Za
   function unlockCallback(bytes calldata data) external returns (bytes memory) {
     // Runs inside the unlock of the pool manager, which is `msg.sender`. Both passes call
     // `poolSwap` of the helper of the solver with the same `poolSwap` parameters. The helper runs
-    // inside the unlock and opens none. It is not recorded in the transient slot because no pool
-    // calls back into it.
+    // inside the unlock and opens none. The callbacks of an optimizer pool are delegatecalled to
+    // the targets that the optimizer registers.
     bytes calldata ownerParamsData = data.decodeBytes(0);
     bytes calldata solverData = data.decodeBytes(1);
 
@@ -239,8 +255,8 @@ contract ZapUniswapV4BaseAdapter is IZapUniswapV4BaseAdapter, ImmutableState, Za
       || poolKey.currency1.selfBalanceMinusOne() >= minZapInAmounts.value1();
   }
 
-  /// @dev Calls `helper` with the amounts in `additionalParams`, records the amounts to add that
-  /// it returns in `state` and returns the liquidity they add
+  /// @dev Calls `helper` with the amounts in `additionalParams`, records the balances after the
+  /// swap that it returns in `state` and returns the liquidity they add
   function _poolSwap(
     bytes calldata ownerData,
     bytes calldata solverData,
@@ -254,8 +270,8 @@ contract ZapUniswapV4BaseAdapter is IZapUniswapV4BaseAdapter, ImmutableState, Za
     IZapUniswapV4BaseHelper.PoolSwapResult memory result =
       abi.decode(abi.decode(returnData, (bytes)), (IZapUniswapV4BaseHelper.PoolSwapResult));
 
-    state.amount0 = result.amount0ToAdd;
-    state.amount1 = result.amount1ToAdd;
+    state.amount0 = result.amount0AfterSwap;
+    state.amount1 = result.amount1AfterSwap;
     return result.liquidityToAdd;
   }
 
@@ -321,8 +337,9 @@ contract ZapUniswapV4BaseAdapter is IZapUniswapV4BaseAdapter, ImmutableState, Za
     return result;
   }
 
-  /// @dev Adds `liquidityToAdd` to the position, settling the amounts that it requires, deducts
-  /// the added amounts from `state` and records the addition in `zapInResult`
+  /// @dev Adds liquidity to the position, updates the amounts in `state` and records the addition
+  /// in `zapInResult`. The liquidity is `liquidityToAdd`, or with `readBalanceFlag` the liquidity
+  /// that the position manager computes from the credited deltas.
   function _modifyLiquidity(
     ZapInOwnerParams calldata params,
     bool readBalanceFlag,
@@ -330,30 +347,28 @@ contract ZapUniswapV4BaseAdapter is IZapUniswapV4BaseAdapter, ImmutableState, Za
     ZapInState memory state,
     ZapInResult memory zapInResult
   ) internal {
-    (uint256 addedAmount0, uint256 addedAmount1) = _amountsForLiquidity(state, liquidityToAdd);
     bool mint = state.tokenId == 0;
+    uint256 addedAmount0;
+    uint256 addedAmount1;
 
     uint128 liquidityBefore = 0;
     if (readBalanceFlag) {
-      if (addedAmount0 > state.amount0) {
-        addedAmount0 = state.amount0;
-      }
-      if (addedAmount1 > state.amount1) {
-        addedAmount1 = state.amount1;
-      }
-
-      // Settles the added amounts for the position manager, which computes the liquidity from
-      // the credited deltas
-      _settleFor(state.poolManager, params.poolKey.currency0, params.posManager, addedAmount0);
-      _settleFor(state.poolManager, params.poolKey.currency1, params.posManager, addedAmount1);
+      // Settles the full balances for the position manager, which computes the liquidity from
+      // the credited deltas. CLOSE_CURRENCY returns the excess to the proxy, and `_readDeltas`
+      // derives the added amounts from the balance changes
+      _settleFor(state.poolManager, params.poolKey.currency0, params.posManager, state.amount0);
+      _settleFor(state.poolManager, params.poolKey.currency1, params.posManager, state.amount1);
 
       if (!mint) {
         liquidityBefore = IPositionManager(params.posManager).getPositionLiquidity(state.tokenId);
       }
-    } else if (params.poolKey.currency0.isNative()) {
-      // The position manager credits the accrued fees of an increase against the principal. The
-      // native amount is settled in full for it, and CLOSE_CURRENCY returns the credited fees
-      _settleFor(state.poolManager, params.poolKey.currency0, params.posManager, addedAmount0);
+    } else {
+      (addedAmount0, addedAmount1) = _amountsForLiquidity(state, liquidityToAdd);
+      if (params.poolKey.currency0.isNative()) {
+        // The position manager credits the accrued fees of an increase against the principal. The
+        // native amount is settled in full for it, and CLOSE_CURRENCY returns the credited fees
+        _settleFor(state.poolManager, params.poolKey.currency0, params.posManager, addedAmount0);
+      }
     }
 
     bytes memory actions = new bytes(3);

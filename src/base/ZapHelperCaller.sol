@@ -11,28 +11,18 @@ import {Address} from 'openzeppelin-contracts/contracts/utils/Address.sol';
 import {TransientSlot} from 'openzeppelin-contracts/contracts/utils/TransientSlot.sol';
 
 /// @title ZapHelperCaller
-/// @notice Delegatecalls a helper to run a pool swap and forwards the callbacks of that swap to the
-/// helper
-/// @dev The helper runs in the context of this contract with its balances. The helper is recorded
-/// in a transient slot so that callbacks of the pool reach it: an adapter whose pools call back
-/// sets it with `_setHelper` before its first pool swap and clears it with `_clearHelper` after
-/// its last one, and the calls to `IZapLegacyPoolSwapHelper` and `IZapPoolSwapAgainHelper` record
-/// it for the duration of each delegatecall.
+/// @notice Delegatecalls a helper to run a pool swap, and runs the helper calls of the adapters
+/// that take fixed and variable parameters
+/// @dev The helper runs in the context of this contract with its balances. The calls to
+/// `IZapLegacyPoolSwapHelper` and `IZapPoolSwapAgainHelper` record the helper in a transient slot
+/// for the duration of each delegatecall, so that `_forwardCallback` reaches it. The pool swap
+/// with owner, solver and additional data records nothing; its callbacks go through the callback
+/// registry.
 abstract contract ZapHelperCaller {
   using TransientSlot for *;
 
-  /// @dev Transient slot holding the helper of the ongoing delegatecall
+  /// @dev Transient slot holding the helper of the ongoing legacy delegatecall
   bytes32 private constant HELPER_SLOT = bytes32(erc7201('ks.zap.adapter.helper'));
-
-  /// @dev Records `helper` as the helper of the pool swaps that follow
-  function _setHelper(address helper) internal {
-    HELPER_SLOT.asAddress().tstore(helper);
-  }
-
-  /// @dev Clears the recorded helper
-  function _clearHelper() internal {
-    HELPER_SLOT.asAddress().tstore(address(0));
-  }
 
   /// @dev Delegatecalls `poolSwap` of `helper` with the owner, solver and additional data and
   /// returns its result, without recording the helper. Reverts when `helper` has no code.

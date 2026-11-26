@@ -13,17 +13,19 @@ interface IZapPancakeInfinityBaseHelper is IZapHelper {
    * @param originalAmount0 The amount of currency0 before the swap
    * @param originalAmount1 The amount of currency1 before the swap
    * @param usedOffchainData Whether the off-chain data was used
-   * @param liquidityToAdd The liquidity that the amounts to add give at the price after the swap
-   * @param amount0ToAdd The amount of currency0 to add to the position after the swap
-   * @param amount1ToAdd The amount of currency1 to add to the position after the swap
+   * @param liquidityToAdd The liquidity that the balances after the swap give at the pool price
+   * @param amount0AfterSwap The balance of currency0 after the swap; the adapter settles it in
+   * full when `readBalanceFlag` is set
+   * @param amount1AfterSwap The balance of currency1 after the swap; the adapter settles it in
+   * full when `readBalanceFlag` is set
    */
   event PoolSwap(
     uint256 originalAmount0,
     uint256 originalAmount1,
     bool usedOffchainData,
     uint128 liquidityToAdd,
-    uint256 amount0ToAdd,
-    uint256 amount1ToAdd
+    uint256 amount0AfterSwap,
+    uint256 amount1AfterSwap
   );
 
   /**
@@ -65,15 +67,17 @@ interface IZapPancakeInfinityBaseHelper is IZapHelper {
   /**
    * @notice The result of the pool swap of a Pancake Infinity zap
    * @param usedOffchainData Whether the off-chain data was used
-   * @param liquidityToAdd The liquidity that the amounts to add give at the price after the swap
-   * @param amount0ToAdd The amount of currency0 to add to the position after the swap
-   * @param amount1ToAdd The amount of currency1 to add to the position after the swap
+   * @param liquidityToAdd The liquidity that the balances after the swap give at the pool price
+   * @param amount0AfterSwap The balance of currency0 after the swap; the adapter settles it in
+   * full when `readBalanceFlag` is set
+   * @param amount1AfterSwap The balance of currency1 after the swap; the adapter settles it in
+   * full when `readBalanceFlag` is set
    */
   struct PoolSwapResult {
     bool usedOffchainData;
     uint128 liquidityToAdd;
-    uint256 amount0ToAdd;
-    uint256 amount1ToAdd;
+    uint256 amount0AfterSwap;
+    uint256 amount1AfterSwap;
   }
 
   /**

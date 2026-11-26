@@ -4,6 +4,7 @@ pragma solidity ^0.8.35;
 import {IZapUniswapV3Adapter} from '../../interfaces/adapters/uniswap-v3/IZapUniswapV3Adapter.sol';
 import {IZapUniswapV3Helper} from '../../interfaces/adapters/uniswap-v3/IZapUniswapV3Helper.sol';
 
+import {CallbackDispatcher} from '../../base/CallbackDispatcher.sol';
 import {ImmutableState} from '../../base/ImmutableState.sol';
 import {ZapHelperCaller} from '../../base/ZapHelperCaller.sol';
 import {CommonLibrary} from '../../libraries/CommonLibrary.sol';
@@ -22,14 +23,19 @@ import {IERC721} from 'openzeppelin-contracts/contracts/token/ERC721/IERC721.sol
  * @notice Adds liquidity to a Uniswap V3 position with the token balances of the account that
  * delegatecalls it, or removes liquidity from a position that account holds
  * @dev AHV2ProxyCallee delegatecalls the adapter, so the balances and the positions are those of
- * the proxy. The fallback forwards the swap callbacks of the pools to the helper recorded in a
- * transient slot.
+ * the proxy. The callbacks of the pools are delegatecalled to the targets that the helper and the
+ * optimizers register.
  */
-contract ZapUniswapV3Adapter is IZapUniswapV3Adapter, ImmutableState, ZapHelperCaller {
+contract ZapUniswapV3Adapter is
+  IZapUniswapV3Adapter,
+  ImmutableState,
+  ZapHelperCaller,
+  CallbackDispatcher
+{
   using TokenHelper for address;
   using CommonLibrary for *;
 
-  /// @dev Tokens, amounts to add and position of a zap in
+  /// @dev Tokens, position and amounts available to add of a zap in
   struct ZapInState {
     address token0;
     address token1;
@@ -44,9 +50,13 @@ contract ZapUniswapV3Adapter is IZapUniswapV3Adapter, ImmutableState, ZapHelperC
   /// @dev Accepts native balance
   receive() external payable {}
 
-  /// @dev Forwards the swap callbacks of the pool swaps to the helper
-  fallback() external {
-    _forwardUniswapV3SwapCallback();
+  /**
+   * @notice Delegatecalls a callback to the target registered for its selector
+   * @param data The calldata
+   * @return The return data of the target
+   */
+  fallback(bytes calldata data) external returns (bytes memory) {
+    return _fallback(data);
   }
 
   /**
@@ -101,14 +111,11 @@ contract ZapUniswapV3Adapter is IZapUniswapV3Adapter, ImmutableState, ZapHelperC
     zapInResult.originalAmount1 = state.token1.selfBalanceMinusOne();
 
     // Both passes call `poolSwap` of the helper of the solver with the same `poolSwap`
-    // parameters. The helper is recorded in a transient slot before the first pool swap and
-    // cleared after the second pass, so that the fallback forwards the swap callbacks of the
-    // pools to it.
+    // parameters.
     // First pass: the helper receives the token balances less 1 wei and the extra data. It swaps
     // when `poolSwap.iterations` is not zero and otherwise returns the amounts unchanged. The
     // pass adds the amounts and the liquidity that the helper returns, and reverts when that
     // liquidity is zero.
-    _setHelper(solverParams.helper);
     uint128 liquidityToAdd = _poolSwap(
       data,
       solverData,
@@ -153,7 +160,6 @@ contract ZapUniswapV3Adapter is IZapUniswapV3Adapter, ImmutableState, ZapHelperC
         _modifyPosition(params, state, zapInResult);
       }
     }
-    _clearHelper();
 
     // `minLiquidity` is checked on the liquidity added by both passes.
     require(
@@ -185,8 +191,8 @@ contract ZapUniswapV3Adapter is IZapUniswapV3Adapter, ImmutableState, ZapHelperC
       || state.token1.selfBalanceMinusOne() >= minZapInAmounts.value1();
   }
 
-  /// @dev Calls `helper` with the amounts in `additionalParams`, records the amounts to add that
-  /// it returns in `state` and returns the liquidity they add
+  /// @dev Calls `helper` with the amounts in `additionalParams`, records the balances after the
+  /// swap that it returns in `state` and returns the liquidity they add
   function _poolSwap(
     bytes calldata ownerData,
     bytes calldata solverData,
@@ -200,8 +206,8 @@ contract ZapUniswapV3Adapter is IZapUniswapV3Adapter, ImmutableState, ZapHelperC
     IZapUniswapV3Helper.PoolSwapResult memory result =
       abi.decode(abi.decode(returnData, (bytes)), (IZapUniswapV3Helper.PoolSwapResult));
 
-    state.amount0 = result.amount0ToAdd;
-    state.amount1 = result.amount1ToAdd;
+    state.amount0 = result.amount0AfterSwap;
+    state.amount1 = result.amount1AfterSwap;
     return result.liquidityToAdd;
   }
 
