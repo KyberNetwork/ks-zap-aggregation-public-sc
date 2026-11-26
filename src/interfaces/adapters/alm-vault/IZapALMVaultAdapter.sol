@@ -6,9 +6,9 @@ import {IZapAdapter} from '../IZapAdapter.sol';
 import {PackedBits} from '../../../types/PackedBits.sol';
 import {PackedU128} from '../../../types/PackedU128.sol';
 
-/// @title IZapVaultAdapter
-/// @notice Interface of {ZapVaultAdapter}
-interface IZapVaultAdapter is IZapAdapter {
+/// @title IZapALMVaultAdapter
+/// @notice Interface of {ZapALMVaultAdapter}
+interface IZapALMVaultAdapter is IZapAdapter {
   /// @notice Thrown when the first pass mints no shares or the shares minted by the zap in are
   /// below `minShares`
   error ZapInVaultInsufficientShares();

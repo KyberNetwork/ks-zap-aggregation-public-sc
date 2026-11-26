@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.35;
 
-import {ZapVaultAdapter} from '../vault/ZapVaultAdapter.sol';
+import {ZapALMVaultAdapter} from '../alm-vault/ZapALMVaultAdapter.sol';
 
 import {IHypervisor} from '../../vendors/gamma/IHypervisor.sol';
 import {IUniProxy} from '../../vendors/gamma/IUniProxy.sol';
@@ -12,11 +12,11 @@ import {TokenHelper} from 'ks-common-sc/src/libraries/token/TokenHelper.sol';
 /// @notice Deposits the token balances of the account that delegatecalls it into a Gamma vault on
 /// Uniswap V3, Algebra Base, Algebra Directional Fees or Ramses V2, or removes vault shares that
 /// account holds
-contract ZapGammaAdapter is ZapVaultAdapter {
+contract ZapGammaAdapter is ZapALMVaultAdapter {
   using TokenHelper for address;
 
   /// @param _WETH The wrapped native token
-  constructor(address _WETH) ZapVaultAdapter(_WETH) {}
+  constructor(address _WETH) ZapALMVaultAdapter(_WETH) {}
 
   /// @dev Deposits the amounts in `state` through the UniProxy, which mints the shares to the
   /// recipient; the deposited amounts are the balance decreases of the deposit

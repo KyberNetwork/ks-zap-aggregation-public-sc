@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.38;
 
-import {ZapVaultAdapter} from '../vault/ZapVaultAdapter.sol';
+import {ZapALMVaultAdapter} from '../alm-vault/ZapALMVaultAdapter.sol';
 
 import {ISteerVault} from '../../vendors/steer/ISteerVault.sol';
 
 /// @title ZapSteerAdapter
 /// @notice Deposits the token balances of the account that delegatecalls it into a Steer vault, or
 /// removes vault shares that account holds
-contract ZapSteerAdapter is ZapVaultAdapter {
+contract ZapSteerAdapter is ZapALMVaultAdapter {
   /// @param _WETH The wrapped native token
-  constructor(address _WETH) ZapVaultAdapter(_WETH) {}
+  constructor(address _WETH) ZapALMVaultAdapter(_WETH) {}
 
   /// @dev Deposits the amounts in `state` into the vault, which mints the shares to the recipient
   /// and leaves the amounts it does not use

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {IZapVaultAdapter} from '../../interfaces/adapters/vault/IZapVaultAdapter.sol';
-import {IZapVaultHelper} from '../../interfaces/adapters/vault/IZapVaultHelper.sol';
+import {IZapALMVaultAdapter} from '../../interfaces/adapters/alm-vault/IZapALMVaultAdapter.sol';
+import {IZapALMVaultHelper} from '../../interfaces/adapters/alm-vault/IZapALMVaultHelper.sol';
 
 import {CallbackDispatcher} from '../../base/CallbackDispatcher.sol';
 import {ImmutableState} from '../../base/ImmutableState.sol';
@@ -16,15 +16,15 @@ import {IAHV2Callee} from 'ks-allowance-hub/src/interfaces/base/IAHV2Callee.sol'
 import {TokenHelper} from 'ks-common-sc/src/libraries/token/TokenHelper.sol';
 
 /**
- * @title ZapVaultAdapter
+ * @title ZapALMVaultAdapter
  * @notice Deposits the token balances of the account that delegatecalls it into a vault of
  * concentrated liquidity positions, or removes vault shares that account holds
  * @dev AHV2ProxyCallee delegatecalls the adapter, so the balances and the shares are those of the
  * proxy. The callbacks of the pools are delegatecalled to the targets that the helper registers.
  * A vault protocol implements the deposit, the approval target and the withdrawal.
  */
-abstract contract ZapVaultAdapter is
-  IZapVaultAdapter,
+abstract contract ZapALMVaultAdapter is
+  IZapALMVaultAdapter,
   ImmutableState,
   ZapHelperCaller,
   CallbackDispatcher
@@ -116,7 +116,7 @@ abstract contract ZapVaultAdapter is
       solverData,
       solverParams.helper,
       state,
-      IZapVaultHelper.PoolSwapAdditionalParams({
+      IZapALMVaultHelper.PoolSwapAdditionalParams({
         amount0: zapInResult.originalAmount0,
         amount1: zapInResult.originalAmount1,
         useExtraData: true
@@ -146,7 +146,7 @@ abstract contract ZapVaultAdapter is
         solverData,
         solverParams.helper,
         state,
-        IZapVaultHelper.PoolSwapAdditionalParams({
+        IZapALMVaultHelper.PoolSwapAdditionalParams({
           amount0: state.token0.selfBalanceMinusOne(),
           amount1: state.token1.selfBalanceMinusOne(),
           useExtraData: false
@@ -184,13 +184,13 @@ abstract contract ZapVaultAdapter is
     bytes calldata solverData,
     address helper,
     ZapInState memory state,
-    IZapVaultHelper.PoolSwapAdditionalParams memory additionalParams
+    IZapALMVaultHelper.PoolSwapAdditionalParams memory additionalParams
   ) internal returns (uint256 sharesToAdd) {
     bytes memory additionalData = abi.encode(additionalParams);
 
     bytes memory returnData = _poolSwap(helper, ownerData, solverData, additionalData);
-    IZapVaultHelper.PoolSwapResult memory result =
-      abi.decode(abi.decode(returnData, (bytes)), (IZapVaultHelper.PoolSwapResult));
+    IZapALMVaultHelper.PoolSwapResult memory result =
+      abi.decode(abi.decode(returnData, (bytes)), (IZapALMVaultHelper.PoolSwapResult));
 
     state.amount0 = result.amount0AfterSwap;
     state.amount1 = result.amount1AfterSwap;

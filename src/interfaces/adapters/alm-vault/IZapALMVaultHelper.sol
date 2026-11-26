@@ -5,9 +5,9 @@ import {IZapHelper} from '../IZapHelper.sol';
 
 import {PackedU128} from '../../../types/PackedU128.sol';
 
-/// @title IZapVaultHelper
-/// @notice Interface of {ZapVaultHelper}
-interface IZapVaultHelper is IZapHelper {
+/// @title IZapALMVaultHelper
+/// @notice Interface of {ZapALMVaultHelper}
+interface IZapALMVaultHelper is IZapHelper {
   /**
    * @notice Emitted when the helper swaps on the pool towards the ratio of the vault, or deposits
    * the amounts at the pool price when it swaps nothing
