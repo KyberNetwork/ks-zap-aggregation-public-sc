@@ -41,6 +41,8 @@ interface IZapSolidlyV2Helper is IZapHelper {
    * @param liquidity The liquidity added
    * @param addedAmount0 The amount of token0 added
    * @param addedAmount1 The amount of token1 added
+   * @param remainingAmount0 The amount of token0 left after the swap and the addition
+   * @param remainingAmount1 The amount of token1 left after the swap and the addition
    */
   struct PreviewZapInResult {
     int256 amount0Delta;
@@ -48,6 +50,8 @@ interface IZapSolidlyV2Helper is IZapHelper {
     uint256 liquidity;
     uint256 addedAmount0;
     uint256 addedAmount1;
+    uint256 remainingAmount0;
+    uint256 remainingAmount1;
   }
 
   /**

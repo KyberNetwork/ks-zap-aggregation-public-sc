@@ -150,6 +150,10 @@ contract ZapUniswapV2Adapter is
       zapInResult.addedLiquidity >= params.minLiquidity, ZapInUniswapV2InsufficientLiquidity()
     );
 
+    // The leftover balances of token0 and token1, minus 1, are recorded after the last addition.
+    zapInResult.remainingAmount0 = state.token0.selfBalanceMinusOne();
+    zapInResult.remainingAmount1 = state.token1.selfBalanceMinusOne();
+
     bytes memory result = abi.encode(zapInResult);
     emit ZapIn(result);
 

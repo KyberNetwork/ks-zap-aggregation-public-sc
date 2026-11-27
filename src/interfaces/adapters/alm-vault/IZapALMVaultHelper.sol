@@ -53,6 +53,8 @@ interface IZapALMVaultHelper is IZapHelper {
    * @param shares The shares minted
    * @param addedAmount0 The amount of token0 deposited
    * @param addedAmount1 The amount of token1 deposited
+   * @param remainingAmount0 The amount of token0 left after the swap and the addition
+   * @param remainingAmount1 The amount of token1 left after the swap and the addition
    */
   struct PreviewZapInResult {
     uint160 sqrtPriceStartX96;
@@ -63,6 +65,8 @@ interface IZapALMVaultHelper is IZapHelper {
     uint256 shares;
     uint256 addedAmount0;
     uint256 addedAmount1;
+    uint256 remainingAmount0;
+    uint256 remainingAmount1;
   }
 
   /**

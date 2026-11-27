@@ -86,6 +86,10 @@ interface IZapUniswapV3Adapter is IZapAdapter {
    * @param addedLiquidity The liquidity added by both passes
    * @param addedAmount0 The amount of token0 added by both passes
    * @param addedAmount1 The amount of token1 added by both passes
+   * @param remainingAmount0 The amount of token0 after the pool swap of the last pass less the
+   * amount added in that pass
+   * @param remainingAmount1 The amount of token1 after the pool swap of the last pass less the
+   * amount added in that pass
    */
   struct ZapInResult {
     address posManager;
@@ -96,6 +100,8 @@ interface IZapUniswapV3Adapter is IZapAdapter {
     uint256 addedLiquidity;
     uint256 addedAmount0;
     uint256 addedAmount1;
+    uint256 remainingAmount0;
+    uint256 remainingAmount1;
   }
 
   /**

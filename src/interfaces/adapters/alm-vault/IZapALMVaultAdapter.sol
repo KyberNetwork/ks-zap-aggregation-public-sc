@@ -78,6 +78,10 @@ interface IZapALMVaultAdapter is IZapAdapter {
    * @param addedShares The shares minted by both passes
    * @param addedAmount0 The amount of token0 deposited by both passes
    * @param addedAmount1 The amount of token1 deposited by both passes
+   * @param remainingAmount0 The amount of token0 after the pool swap of the last pass less the
+   * amount deposited in that pass
+   * @param remainingAmount1 The amount of token1 after the pool swap of the last pass less the
+   * amount deposited in that pass
    */
   struct ZapInResult {
     address vault;
@@ -87,6 +91,8 @@ interface IZapALMVaultAdapter is IZapAdapter {
     uint256 addedShares;
     uint256 addedAmount0;
     uint256 addedAmount1;
+    uint256 remainingAmount0;
+    uint256 remainingAmount1;
   }
 
   /**

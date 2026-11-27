@@ -52,6 +52,8 @@ interface IZapUniswapV3Helper is IZapHelper {
    * @param positionLiquidity The amount of liquidity added
    * @param addedAmount0 The amount of token0 added
    * @param addedAmount1 The amount of token1 added
+   * @param remainingAmount0 The amount of token0 left after the swap and the addition
+   * @param remainingAmount1 The amount of token1 left after the swap and the addition
    */
   struct PreviewZapInResult {
     uint160 sqrtPriceStartX96;
@@ -62,6 +64,8 @@ interface IZapUniswapV3Helper is IZapHelper {
     uint256 positionLiquidity;
     uint256 addedAmount0;
     uint256 addedAmount1;
+    uint256 remainingAmount0;
+    uint256 remainingAmount1;
   }
 
   /**

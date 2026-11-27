@@ -56,6 +56,8 @@ interface IZapSolidlyV2Adapter is IZapAdapter {
    * @param addedLiquidity The liquidity that the pair minted to the recipient in both passes
    * @param addedAmount0 The amount of token0 transferred to the pair in both passes
    * @param addedAmount1 The amount of token1 transferred to the pair in both passes
+   * @param remainingAmount0 The balance of token0 minus 1, read after the last addition
+   * @param remainingAmount1 The balance of token1 minus 1, read after the last addition
    */
   struct ZapInResult {
     address pool;
@@ -65,6 +67,8 @@ interface IZapSolidlyV2Adapter is IZapAdapter {
     uint256 addedLiquidity;
     uint256 addedAmount0;
     uint256 addedAmount1;
+    uint256 remainingAmount0;
+    uint256 remainingAmount1;
   }
 
   /**

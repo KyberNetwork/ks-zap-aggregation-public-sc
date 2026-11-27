@@ -160,6 +160,10 @@ abstract contract ZapALMVaultAdapter is
     // `minShares` is checked on the shares minted by both passes.
     require(zapInResult.addedShares >= params.minShares, ZapInVaultInsufficientShares());
 
+    // The amounts left after the pool swap of the last pass and its addition are recorded.
+    zapInResult.remainingAmount0 = state.amount0;
+    zapInResult.remainingAmount1 = state.amount1;
+
     bytes memory result = abi.encode(zapInResult);
     emit ZapIn(result);
 

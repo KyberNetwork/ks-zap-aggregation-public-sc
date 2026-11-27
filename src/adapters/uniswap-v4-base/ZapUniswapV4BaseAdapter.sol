@@ -35,8 +35,8 @@ import {IERC721} from 'openzeppelin-contracts/contracts/token/ERC721/IERC721.sol
  * delegatecalls it, or removes liquidity from a position that account holds
  * @dev AHV2ProxyCallee delegatecalls the adapter, so the balances and the positions are those of
  * the proxy. Adding liquidity runs inside one unlock of the pool manager. The tokens are approved
- * on the Permit2 contract that the solver parameters name. The callbacks of other pools are
- * delegatecalled to the targets that the optimizers register.
+ * on the Permit2 contract of the position manager. The callbacks of other pools are delegatecalled
+ * to the targets that the optimizers register.
  */
 contract ZapUniswapV4BaseAdapter is
   IZapUniswapV4BaseAdapter,
@@ -121,7 +121,7 @@ contract ZapUniswapV4BaseAdapter is
     }
 
     if (solverParams.approvalFlags.at(0) || solverParams.approvalFlags.at(1)) {
-      IAllowanceTransfer permit2 = IAllowanceTransfer(solverParams.permit2);
+      IAllowanceTransfer permit2 = IPositionManager(params.posManager).permit2();
       if (solverParams.approvalFlags.at(0)) {
         CommonLibrary.permit2ApproveInf(params.poolKey.currency0, params.posManager, permit2);
       }
@@ -233,6 +233,16 @@ contract ZapUniswapV4BaseAdapter is
     );
 
     zapInResult.tokenId = state.tokenId;
+
+    // With `readBalanceFlag`, the leftover balances minus 1 are recorded; otherwise the amounts
+    // left after the pool swap of the last pass and its addition are recorded.
+    if (solverParams.readBalanceFlag) {
+      zapInResult.remainingAmount0 = params.poolKey.currency0.selfBalanceMinusOne();
+      zapInResult.remainingAmount1 = params.poolKey.currency1.selfBalanceMinusOne();
+    } else {
+      zapInResult.remainingAmount0 = state.amount0;
+      zapInResult.remainingAmount1 = state.amount1;
+    }
 
     return abi.encode(zapInResult);
   }

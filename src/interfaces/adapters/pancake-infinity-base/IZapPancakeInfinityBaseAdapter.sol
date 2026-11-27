@@ -68,10 +68,8 @@ interface IZapPancakeInfinityBaseAdapter is IZapAdapter {
    * pass uses the same parameters without `extraData`.
    * @param minZapInAmounts The minimum balances of currency0 and currency1 left after the first
    * addition; the second pass runs when either balance is at least its minimum
-   * @param approvalFlags Bit 0 and bit 1 set approve `permit2` for the maximum amount of currency0
-   * and currency1 and approve the position manager on `permit2`
-   * @param permit2 The Permit2 contract through which the position manager pulls the currencies;
-   * read only when an approval flag is set
+   * @param approvalFlags Bit 0 and bit 1 set approve the Permit2 contract of the position manager
+   * for the maximum amount of currency0 and currency1, and approve the position manager on it
    * @param readBalanceFlag Settles the amounts to the vault before adding and reads the
    * resulting deltas and balances, for fee-on-transfer tokens
    * @param helper The helper that is delegatecalled for the pool swaps of both passes; it is
@@ -81,7 +79,6 @@ interface IZapPancakeInfinityBaseAdapter is IZapAdapter {
     PancakeInfinityPoolSwapParams poolSwap;
     PackedU128 minZapInAmounts;
     PackedBits approvalFlags;
-    address permit2;
     bool readBalanceFlag;
     address helper;
   }
@@ -96,6 +93,12 @@ interface IZapPancakeInfinityBaseAdapter is IZapAdapter {
    * @param addedLiquidity The liquidity added by both passes
    * @param addedAmount0 The amount of currency0 added by both passes
    * @param addedAmount1 The amount of currency1 added by both passes
+   * @param remainingAmount0 With `readBalanceFlag`, the balance of currency0 minus 1 read after the
+   * last addition; otherwise the amount of currency0 after the pool swap of the last pass less the
+   * amount added in that pass
+   * @param remainingAmount1 With `readBalanceFlag`, the balance of currency1 minus 1 read after the
+   * last addition; otherwise the amount of currency1 after the pool swap of the last pass less the
+   * amount added in that pass
    */
   struct ZapInResult {
     address posManager;
@@ -106,6 +109,8 @@ interface IZapPancakeInfinityBaseAdapter is IZapAdapter {
     uint256 addedLiquidity;
     uint256 addedAmount0;
     uint256 addedAmount1;
+    uint256 remainingAmount0;
+    uint256 remainingAmount1;
   }
 
   /**
