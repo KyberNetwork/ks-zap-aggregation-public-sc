@@ -7,7 +7,9 @@ import {
   IERC20Metadata
 } from 'openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol';
 
-contract ImmutableState {
+import {Common} from 'ks-common-sc/src/base/Common.sol';
+
+contract ImmutableState is Common {
   address internal immutable original;
 
   IWETH internal immutable WETH;

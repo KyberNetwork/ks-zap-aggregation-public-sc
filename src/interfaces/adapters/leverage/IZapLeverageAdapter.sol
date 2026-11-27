@@ -1,22 +1,24 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {IFlashLoanAdapter} from '../../adapters/flashloan/IFlashLoanAdapter.sol';
-import {IFlashLoanReceiver} from '../../adapters/flashloan/IFlashLoanReceiver.sol';
+import {IFlashLoanReceiver} from '../flashloan/IFlashLoanReceiver.sol';
 
-import {IAHV2Callee} from 'ks-allowance-hub/src/interfaces/base/IAHV2Callee.sol';
+import {BoolAddress} from '../../../types/BoolAddress.sol';
+import {PackedU128} from '../../../types/PackedU128.sol';
 
 /// @title IZapLeverageAdapter
 /// @notice Interface of {ZapLeverageAdapter}
-interface IZapLeverageAdapter is IAHV2Callee, IFlashLoanReceiver {
+interface IZapLeverageAdapter is IFlashLoanReceiver {
   /// @notice Thrown when the caller is not allowed to call the function
   error UnauthorizedCaller(address caller);
 
-  /// @notice Thrown when a swap runs and the solver data is empty
-  error LeverageSwapMissing();
+  /// @notice Thrown when {receiveFlashLoan} does not run as a delegatecall of the flash loan
+  /// adapter
+  error NotFlashLoanAdapter();
 
-  /// @notice Thrown when a swap runs with a zero minimum output
-  error LeverageSwapUnbounded();
+  /// @notice Thrown when the loan token is neither the lending token nor its native or wrapped
+  /// form
+  error LoanTokenMismatch(address loanToken, address lendingToken);
 
   /// @notice Thrown when the collateral amount supplied is below the minimum
   error LeverageInsufficientCollateralDeposit(
@@ -43,95 +45,81 @@ interface IZapLeverageAdapter is IAHV2Callee, IFlashLoanReceiver {
   }
 
   /**
-   * @notice The parameters the Safe reads in the flash loan callback
-   * @param actionType The action type
-   * @param wrapOrUnwrap Whether the callback converts between the native token and WETH
-   * @param withdrawFull Whether a decrease withdraws the whole collateral and repays the whole debt
+   * @notice The parameters of an increase of the leverage
    * @param lendingAdapter The lending adapter delegatecalled for the position change
    * @param lendingContext The encoded lending context
-   * @param collateralToken The collateral token of the position
-   * @param debtToken The debt token of the position
-   * @param minCollateralDeposit The minimum collateral amount supplied on an increase
-   * @param maxDebtBorrow The maximum debt amount borrowed on an increase
-   * @param minDebtRepay The minimum debt amount repaid on a decrease
-   * @param maxCollateralWithdraw The maximum collateral amount withdrawn on a decrease
+   * @param collateralToken The collateral token supplied, the native token for the native balance
+   * @param debtToken The debt token borrowed, the loan token or its native or wrapped form
+   * @param minCollateralDeposit The minimum amount of `collateralToken` supplied
+   * @param maxDebtBorrow The maximum amount of `debtToken` borrowed
    */
-  struct LeverageCallbackParams {
-    ActionType actionType;
-    bool wrapOrUnwrap;
-    bool withdrawFull;
+  struct IncreaseLeverageParams {
     address lendingAdapter;
     bytes lendingContext;
     address collateralToken;
     address debtToken;
     uint256 minCollateralDeposit;
     uint256 maxDebtBorrow;
-    uint256 minDebtRepay;
-    uint256 maxCollateralWithdraw;
   }
 
   /**
-   * @notice Parameters of the leverage action
-   * @param safe The Safe account of the position
-   * @param recipient The receiver of the Safe NFT
-   * @param flashLoanSource The source of the flash loan
-   * @param flashLoanParams The parameters of the flash loan, specific to the source
-   * @param actionType The bounded action type
-   * @param wrapOrUnwrap Whether the leverage adapter converts between the native token and WETH
-   * @param withdrawFull Whether a decrease withdraws the whole collateral and repays the whole debt
-   * @param lendingAdapter The lending adapter of the position
+   * @notice The parameters of a decrease of the leverage
+   * @param lendingAdapter The lending adapter delegatecalled for the position change
    * @param lendingContext The encoded lending context
-   * @param collateralToken The collateral token of the position
-   * @param debtToken The debt token of the position
-   * @param swapTarget The swap target, the zero address for no swap
-   * @param swapApproveMax Whether the flash loan adapter approves the swap target for the maximum
-   * amount and keeps the approval, instead of approving `swapAmountIn` and resetting it
-   * @param swapTokenOut The token the swap outputs
-   * @param swapAmountIn The amount of the flash loaned token the swap spends, zero for no swap
-   * @param minSwapAmountOut The minimum increase of the Safe balance of `swapTokenOut`
-   * @param minCollateralDeposit The minimum collateral amount supplied on an increase, compared
-   * with the amount passed to the lending adapter after the wrap or unwrap relabeling and the
-   * scaling of the Arc native token
-   * @param maxDebtBorrow The maximum debt amount borrowed on an increase, compared as
-   * `minCollateralDeposit` is
-   * @param minDebtRepay The minimum debt amount repaid on a decrease, compared as
-   * `minCollateralDeposit` is. With `withdrawFull` the amount is `type(uint256).max`.
-   * @param maxCollateralWithdraw The maximum collateral amount withdrawn on a decrease, compared as
-   * `minCollateralDeposit` is. With `withdrawFull` the amount is `type(uint256).max`, so a full
-   * withdrawal needs `type(uint256).max`.
+   * @param collateralToken The collateral token withdrawn, the loan token or its native or wrapped
+   * form
+   * @param debtToken The debt token repaid, the native token for the native balance
+   * @param withdrawFull Whether the whole collateral is withdrawn and the whole debt repaid
+   * @param minDebtRepay The minimum amount of `debtToken` repaid. With `withdrawFull` the amount is
+   * `type(uint256).max`.
+   * @param maxCollateralWithdraw The maximum amount of `collateralToken` withdrawn. With
+   * `withdrawFull` the amount is `type(uint256).max`, so a full withdrawal needs
+   * `type(uint256).max`.
+   * @param minSweepAmounts The minimum amounts of `collateralToken` (value0) and `debtToken`
+   * (value1) transferred to the owner after the decrease. A balance less 1 wei that is zero or below
+   * its minimum stays in the Safe Account.
    */
-  struct LeverageParams {
-    address safe;
-    address recipient;
-    IFlashLoanAdapter.FlashLoanSource flashLoanSource;
-    bytes flashLoanParams;
-    ActionType actionType;
-    bool wrapOrUnwrap;
-    bool withdrawFull;
+  struct DecreaseLeverageParams {
     address lendingAdapter;
     bytes lendingContext;
     address collateralToken;
     address debtToken;
-    address swapTarget;
-    bool swapApproveMax;
-    address swapTokenOut;
-    uint256 swapAmountIn;
-    uint256 minSwapAmountOut;
-    uint256 minCollateralDeposit;
-    uint256 maxDebtBorrow;
+    bool withdrawFull;
     uint256 minDebtRepay;
     uint256 maxCollateralWithdraw;
+    PackedU128 minSweepAmounts;
   }
 
-  /// @notice Returns the allowance hub, the only account allowed to call {execute}
-  function ALLOWANCE_HUB() external view returns (address);
+  /**
+   * @notice The solver data of {receiveFlashLoan} when the loan is swapped; the swap sends its
+   * output to the Safe Account
+   * @param target The swap target, and whether to approve it for the maximum amount of the loan
+   * token; the flag is ignored for the native token
+   * @param data The calldata of the swap
+   */
+  struct LeverageSwap {
+    BoolAddress target;
+    bytes data;
+  }
 
-  /// @notice Returns the KSSafeAccountHub that holds the Safe NFT during {execute}
-  function SAFE_ACCOUNT_HUB() external view returns (address);
-
-  /// @notice Returns the flash loan adapter, the only account allowed to call
-  /// {receiveFlashLoan}
-  function FLASH_LOAN_ADAPTER() external view returns (address);
+  /**
+   * @notice Changes the position of the Safe Account and transfers `amount` of `loanToken` to the
+   * flash loan adapter
+   * @dev A Safe Account delegatecalls it from a call of KSSafeAccountHub. A decrease then transfers
+   * the balances of the collateral token and the debt token to `owner`, within the minimums of
+   * {DecreaseLeverageParams}.
+   * @param leverageData `abi.encodePacked(ActionType actionType, bytes actionParams)`, where
+   * `actionParams` is `abi.encode(IncreaseLeverageParams)` or `abi.encode(DecreaseLeverageParams)`
+   * @param loanToken The token of the flash loan
+   * @param amount The amount of `loanToken` that the step transfers to the flash loan adapter
+   * @param owner The account that receives the balances left after a decrease
+   */
+  function modifyLeverage(
+    bytes calldata leverageData,
+    address loanToken,
+    uint256 amount,
+    address owner
+  ) external;
 
   /**
    * @notice Transfers the whole balance of each of `tokens` to `recipient`

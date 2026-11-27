@@ -2,15 +2,14 @@
 pragma solidity 0.8.38;
 
 import {ERC721Permit} from './base/ERC721Permit.sol';
-import {SafeModulePermission} from './base/SafeModulePermission.sol';
 import {IKSSafeAccountHub} from './interfaces/IKSSafeAccountHub.sol';
 
 import {ISettlementContext} from 'ks-allowance-hub/src/interfaces/base/ISettlementContext.sol';
-import {CalldataDecoder} from 'ks-common-sc/src/libraries/calldata/CalldataDecoder.sol';
 
-import {ContractCall} from './types/ContractCall.sol';
 import {ISafe} from './vendors/safe-smart-account/ISafe.sol';
 import {ISafeProxyFactory} from './vendors/safe-smart-account/ISafeProxyFactory.sol';
+
+import {Common} from 'ks-common-sc/src/base/Common.sol';
 
 import {ERC721Holder} from 'openzeppelin-contracts/contracts/token/ERC721/utils/ERC721Holder.sol';
 import {
@@ -20,34 +19,35 @@ import {TransientSlot} from 'openzeppelin-contracts/contracts/utils/TransientSlo
 
 /// @title KSSafeAccountHub
 /// @notice Creates Safe Accounts owned through an ERC721 token. While it holds the token of a Safe
-/// Account, the leverage adapter can run module transactions on that Safe Account and then
+/// Account, the flash loan adapter can make that Safe Account delegatecall one contract and then
 /// transfer the token.
 /// @dev While an order of the allowance hub is being settled, the token can only be transferred to
 /// or from this contract.
 contract KSSafeAccountHub is
   IKSSafeAccountHub,
   ERC721Permit,
-  SafeModulePermission,
   ERC721Holder,
-  ReentrancyGuardTransient
+  ReentrancyGuardTransient,
+  Common
 {
-  using CalldataDecoder for bytes;
   using TransientSlot for *;
 
   /// @dev Base of the transient slots that mark the Safe Accounts executed in the transaction
   bytes32 private constant EXECUTED_SLOT = bytes32(erc7201('ks.safe-account-hub.executed'));
 
-  ISafeProxyFactory public immutable SAFE_PROXY_FACTORY;
+  /// @dev Factory of the Safe Account proxies
+  ISafeProxyFactory internal immutable SAFE_PROXY_FACTORY;
 
-  address public immutable SAFE_SINGLETON;
+  /// @dev Singleton of the Safe Account proxies
+  address internal immutable SAFE_SINGLETON;
 
   address public constant SENTINEL_OWNERS = address(0x1);
 
-  /// @inheritdoc IKSSafeAccountHub
-  address public immutable ALLOWANCE_HUB;
+  /// @dev Allowance hub whose settlement restricts the transfers of the token
+  address internal immutable ALLOWANCE_HUB;
 
-  /// @inheritdoc IKSSafeAccountHub
-  address public immutable LEVERAGE_ADAPTER;
+  /// @dev Flash loan adapter, the only account allowed to call {execute}
+  address internal immutable FLASH_LOAN_ADAPTER;
 
   /// @inheritdoc IKSSafeAccountHub
   uint256 public nextTokenId = 1;
@@ -60,16 +60,20 @@ contract KSSafeAccountHub is
 
   constructor(
     address _allowanceHub,
-    address _leverageAdapter,
+    address _flashLoanAdapter,
     address _safeProxyFactory,
-    /// The deployer supplies the Safe factory and singleton addresses.
-    // forge-lint: disable-next-line(missing-zero-check)
     address _safeSingleton,
     string memory name,
     string memory symbol
-  ) ERC721Permit(name, symbol) {
+  )
+    ERC721Permit(name, symbol)
+    checkAddress(_allowanceHub)
+    checkAddress(_flashLoanAdapter)
+    checkAddress(_safeProxyFactory)
+    checkAddress(_safeSingleton)
+  {
     ALLOWANCE_HUB = _allowanceHub;
-    LEVERAGE_ADAPTER = _leverageAdapter;
+    FLASH_LOAN_ADAPTER = _flashLoanAdapter;
     SAFE_PROXY_FACTORY = ISafeProxyFactory(_safeProxyFactory);
     SAFE_SINGLETON = _safeSingleton;
   }
@@ -101,39 +105,24 @@ contract KSSafeAccountHub is
   }
 
   /// @inheritdoc IKSSafeAccountHub
-  function execute(
-    address safe,
-    address[] calldata modules,
-    ContractCall[] calldata calls,
-    address owner
-  ) external override nonReentrant returns (bytes[] memory returnData) {
-    require(msg.sender == LEVERAGE_ADAPTER, UnauthorizedCaller(msg.sender));
+  function execute(address safe, address target, bytes calldata data, address owner)
+    external
+    nonReentrant
+    returns (bytes memory returnData)
+  {
+    require(msg.sender == FLASH_LOAN_ADAPTER, UnauthorizedCaller(msg.sender));
 
+    // A Safe Account runs once per transaction
     bytes32 executedSlot = _executedSlot(safe);
     require(!executedSlot.asBoolean().tload(), SafeAlreadyExecuted(safe));
     executedSlot.asBoolean().tstore(true);
 
+    // The token must be in the custody of this contract
     uint256 tokenId = safeToTokenId[safe];
     require(ownerOf(tokenId) == address(this), UnauthorizedSafe());
 
-    for (uint256 i = 0; i < modules.length; i++) {
-      require(
-        _execTxFromModule(safe, abi.encodeCall(this.enableModule, (modules[i]))),
-        EnableModuleFailed()
-      );
-    }
-
-    returnData = new bytes[](calls.length);
-    for (uint256 i = 0; i < calls.length; i++) {
-      returnData[i] = _execTxFromModuleReturnData(safe, calls[i]);
-    }
-
-    for (uint256 i = 0; i < modules.length; i++) {
-      require(
-        _execTxFromModule(safe, abi.encodeCall(this.disableModule, (modules[i]))),
-        DisableModuleFailed()
-      );
-    }
+    // The Safe Account delegatecalls the target once, as a module transaction of this contract
+    returnData = _delegateCallFromSafe(safe, target, data);
 
     _transfer(address(this), owner, tokenId);
   }
@@ -167,29 +156,16 @@ contract KSSafeAccountHub is
       );
   }
 
-  function _execTxFromModule(address safe, bytes memory data) internal returns (bool success) {
-    success =
-    /// The Safe is called once per module or call entry by design.
-    /// The token stays owned by this contract until the final transfer of execute.
-    // forge-lint: disable-next-line(reentrancy-no-eth)
-    ISafe(safe).execTransactionFromModule(address(this), 0, data, ISafe.Operation.DelegateCall);
-  }
-
-  function _execTxFromModuleReturnData(address safe, ContractCall calldata contractCall)
+  /// @dev Makes the Safe Account delegatecall `target` with `data` and returns the return data
+  function _delegateCallFromSafe(address safe, address target, bytes calldata data)
     internal
     returns (bytes memory returnData)
   {
     bool success;
-    /// The Safe is called once per module or call entry by design.
-    /// The token stays owned by this contract until the final transfer of execute.
+    // The token stays owned by this contract until the final transfer of execute
     // forge-lint: disable-next-item(reentrancy-no-eth)
     (success, returnData) = ISafe(safe)
-      .execTransactionFromModuleReturnData(
-        contractCall.target,
-        0,
-        contractCall.data,
-        contractCall.isDelegateCall ? ISafe.Operation.DelegateCall : ISafe.Operation.Call
-      );
+      .execTransactionFromModuleReturnData(target, 0, data, ISafe.Operation.DelegateCall);
 
     if (!success) {
       revert SafeModuleExecutionFailed(returnData);

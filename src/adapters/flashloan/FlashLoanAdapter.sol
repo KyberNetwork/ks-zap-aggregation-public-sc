@@ -8,10 +8,9 @@ import {IFlashLoanReceiver} from '../../interfaces/adapters/flashloan/IFlashLoan
 import {IPool} from '../../vendors/aave-v3/IPool.sol';
 import {IEVault} from '../../vendors/euler-v2/IEVault.sol';
 import {IMorpho} from '../../vendors/morpho/IMorpho.sol';
-import {ISafe} from '../../vendors/safe-smart-account/ISafe.sol';
 import {IUniswapV3Pool} from '../../vendors/uniswap-v3/IUniswapV3Pool.sol';
 
-import {MASK_160_BITS, MASK_8_BITS} from '../../libraries/BitMask.sol';
+import {MASK_160_BITS} from '../../libraries/BitMask.sol';
 import {CommonLibrary} from '../../libraries/CommonLibrary.sol';
 import {BoolAddress} from '../../types/BoolAddress.sol';
 
@@ -25,86 +24,164 @@ import {
 } from '../../vendors/uniswap-v4/CurrencySettler.sol';
 import {IPoolManager} from '../../vendors/uniswap-v4/IPoolManager.sol';
 
-import {CustomRevert} from 'ks-common-sc/src/libraries/CustomRevert.sol';
+import {IAHV2Callee} from 'ks-allowance-hub/src/interfaces/base/IAHV2Callee.sol';
 import {CalldataDecoder} from 'ks-common-sc/src/libraries/calldata/CalldataDecoder.sol';
 import {TokenHelper} from 'ks-common-sc/src/libraries/token/TokenHelper.sol';
-import {IERC20} from 'openzeppelin-contracts/contracts/interfaces/IERC20.sol';
 import {
   IERC3156FlashBorrower,
   IERC3156FlashLender
 } from 'openzeppelin-contracts/contracts/interfaces/IERC3156FlashLender.sol';
+import {Address} from 'openzeppelin-contracts/contracts/utils/Address.sol';
 
+/**
+ * @title FlashLoanAdapter
+ * @notice Takes a flash loan and delegatecalls a target while the loan is held, as a callee of
+ * {AHV2ProxyCallee}
+ * @dev The owner data names the target and its owner data. The solver data names the loan and the
+ * solver data of the target. The target is delegatecalled in the context of this contract, holding
+ * the loan, and must leave the amounts owed in it. The callbacks are accepted only from the
+ * callback caller that the solver data names for the running flash loan.
+ */
 contract FlashLoanAdapter is IFlashLoanAdapter, ImmutableState {
   using CalldataDecoder for bytes;
-  using CustomRevert for address;
   using TokenHelper for address;
   using CommonLibrary for *;
   using PancakeInfinityCurrencySettler for address;
   using UniswapV4CurrencySettler for address;
+  using Address for address;
 
-  /// @dev Flash loan state while the call of a lender waits for its callback
-  uint256 private constant LOAN_STARTED = 1;
+  /// @dev Phase while the call of a lender waits for its callback
+  uint256 internal constant LOAN_STARTED = 1;
 
-  /// @dev Flash loan state from the callback until the call of the lender returns
-  uint256 private constant CALLBACK_RUNNING = 2;
+  /// @dev Phase from the callback until the call of the lender returns
+  uint256 internal constant CALLBACK_RUNNING = 2;
 
-  /// @dev Flash loan state: 0 when no flash loan runs, `LOAN_STARTED` or `CALLBACK_RUNNING`
-  uint256 private transient flashLoanState;
+  /// @dev Number of bits of the callback caller in `loanState`, below the phase
+  uint256 internal constant PHASE_SHIFT = 160;
 
-  /// @dev Requires that the function runs through a call, not a delegatecall
-  modifier onlyCall() {
-    require(address(this) == original, DelegateCallNotAllowed());
+  /// @dev Proxy callee, the only account allowed to call {execute}
+  address internal immutable PROXY_CALLEE;
+
+  /// @dev Flash loan state of the transaction: the callback caller of the running flash loan in the
+  /// low 160 bits, and the phase above them. The phase is 0 when no flash loan runs, `LOAN_STARTED` or
+  /// `CALLBACK_RUNNING`.
+  uint256 private transient loanState;
+
+  /// @dev Requires that the caller is the proxy callee
+  modifier onlyProxyCallee() {
+    require(msg.sender == PROXY_CALLEE, UnauthorizedCaller(msg.sender));
     _;
   }
 
-  /// @dev Requires that no flash loan runs, sets the state to `LOAN_STARTED`, and clears it after
-  /// the function returns
+  /// @dev Requires that no flash loan runs, and clears the state after the function returns. The
+  /// function sets the state through {_setLoanState}.
   modifier onlyOutsideFlashLoan() {
-    require(flashLoanState == 0, FlashLoanInProgress());
-    flashLoanState = LOAN_STARTED;
+    (uint256 phase,) = _loanState();
+    require(phase == 0, FlashLoanInProgress());
     _;
-    flashLoanState = 0;
+    _setLoanState(0, address(0));
   }
 
-  /// @dev Requires the state `LOAN_STARTED`, then sets it to `CALLBACK_RUNNING`
+  /// @dev Requires the phase `LOAN_STARTED` and the callback caller of the flash loan as caller,
+  /// then sets the phase to `CALLBACK_RUNNING`
   modifier onlyFlashLoanCallback() {
-    require(flashLoanState == LOAN_STARTED, UnexpectedFlashLoanCallback());
-    flashLoanState = CALLBACK_RUNNING;
+    (uint256 phase, address callbackCaller) = _loanState();
+    require(phase == LOAN_STARTED, UnexpectedFlashLoanCallback());
+    require(msg.sender == callbackCaller, UnauthorizedCallbackCaller(msg.sender));
+    _setLoanState(CALLBACK_RUNNING, callbackCaller);
     _;
   }
 
-  constructor(address _WETH) ImmutableState(_WETH) {}
+  /**
+   * @param _WETH The wrapped native token
+   * @param proxyCallee The proxy callee allowed to call {execute}
+   */
+  constructor(address _WETH, address proxyCallee) ImmutableState(_WETH) checkAddress(proxyCallee) {
+    PROXY_CALLEE = proxyCallee;
+  }
 
-  function flashLoan(uint256 flashLoanContext, bytes calldata flashLoanParams, bytes calldata data)
+  /**
+   * @inheritdoc IAHV2Callee
+   * @dev `ownerData` is `abi.encode(address target, bytes targetOwnerData)`. `solverData` is
+   * `abi.encode(uint256 source, address callbackCaller, bytes flashLoanParams,
+   * bytes targetSolverData)`: `source` is a {FlashLoanSource}, `callbackCaller` is the only account
+   * whose callback is accepted, and the first word of `flashLoanParams` is the lender. In the
+   * callback, `target` is delegatecalled through {IFlashLoanReceiver-receiveFlashLoan} with the loaned
+   * tokens, the amounts owed, `targetOwnerData` and `targetSolverData`, and the loan is repaid
+   * afterwards.
+   * @return The empty bytes
+   */
+  function execute(bytes calldata ownerData, bytes calldata solverData)
     external
     payable
-    onlyCall
+    onlyProxyCallee
     onlyOutsideFlashLoan
+    returns (bytes memory)
   {
-    (FlashLoanSource source, ReceiverType receiverType) = _unpackFlashLoanContext(flashLoanContext);
+    // The callback caller is named by the solver, since it can differ from the lender
+    address callbackCaller = solverData.decodeAddress(1);
+    _setLoanState(LOAN_STARTED, callbackCaller);
 
+    // The callback caller is part of the signed solver data, so the payload is not bound to a hash
+    bytes memory payload = _buildPayload(ownerData, solverData);
+    bytes calldata flashLoanParams = solverData.decodeBytes(2);
+
+    // An out-of-range source reverts with a panic in the conversion
+    FlashLoanSource source = FlashLoanSource(solverData.decodeUint256(0));
+    _flashLoan(source, flashLoanParams, payload);
+
+    (uint256 phase,) = _loanState();
+    require(phase == CALLBACK_RUNNING, FlashLoanNotCalledBack());
+
+    return '';
+  }
+
+  /// @dev Returns the phase and the callback caller of the flash loan
+  function _loanState() internal view returns (uint256 phase, address callbackCaller) {
+    uint256 state = loanState;
+    phase = state >> PHASE_SHIFT;
+    callbackCaller = address(uint160(state & MASK_160_BITS));
+  }
+
+  /// @dev Stores the phase and the callback caller of the flash loan
+  function _setLoanState(uint256 phase, address callbackCaller) internal {
+    loanState = (phase << PHASE_SHIFT) | uint160(callbackCaller);
+  }
+
+  /// @dev Returns the target and its data passed through the callback
+  function _buildPayload(bytes calldata ownerData, bytes calldata solverData)
+    internal
+    pure
+    returns (bytes memory)
+  {
+    address target = ownerData.decodeAddress(0);
+    bytes calldata targetOwnerData = ownerData.decodeBytes(1);
+    bytes calldata targetSolverData = solverData.decodeBytes(3);
+    return abi.encode(target, targetOwnerData, targetSolverData);
+  }
+
+  /// @dev Starts the flash loan of the source with the lender-specific parameters
+  function _flashLoan(FlashLoanSource source, bytes calldata flashLoanParams, bytes memory payload)
+    internal
+  {
     if (source == FlashLoanSource.AAVE_V3) {
-      _handleAaveV3(receiverType, flashLoanParams, data);
+      _handleAaveV3(flashLoanParams, payload);
     } else if (source == FlashLoanSource.ERC3156) {
-      _handleERC3156(receiverType, flashLoanParams, data);
+      _handleERC3156(flashLoanParams, payload);
     } else if (source == FlashLoanSource.MORPHO_BLUE) {
-      _handleMorphoBlue(receiverType, flashLoanParams, data);
+      _handleMorphoBlue(flashLoanParams, payload);
     } else if (source == FlashLoanSource.UNISWAP_V3) {
-      _handleUniswapV3(receiverType, flashLoanParams, data);
+      _handleUniswapV3(flashLoanParams, payload);
     } else if (source == FlashLoanSource.UNISWAP_V4) {
-      _handleUniswapV4(receiverType, flashLoanParams, data);
+      _handleUniswapV4(flashLoanParams, payload);
     } else if (source == FlashLoanSource.PANCAKE_INFINITY) {
-      _handlePancakeInfinity(receiverType, flashLoanParams, data);
-    } else if (source == FlashLoanSource.EULER_V2) {
-      _handleEuler(receiverType, flashLoanParams, data);
+      _handlePancakeInfinity(flashLoanParams, payload);
+    } else {
+      _handleEuler(flashLoanParams, payload);
     }
   }
 
-  function _handleAaveV3(
-    ReceiverType receiverType,
-    bytes calldata flashLoanParams,
-    bytes calldata data
-  ) internal {
+  function _handleAaveV3(bytes calldata flashLoanParams, bytes memory payload) internal {
     address pool = flashLoanParams.decodeAddress(0);
     uint256[] calldata amounts = flashLoanParams.decodeUint256Array(2);
 
@@ -125,23 +202,14 @@ contract FlashLoanAdapter is IFlashLoanAdapter, ImmutableState {
       }
     }
 
+    bytes memory callbackData = abi.encode(payload);
     IPool(pool)
       .flashLoan(
-        address(this),
-        tokens,
-        amounts,
-        new uint256[](tokens.length),
-        address(0),
-        abi.encode(_packReceiveInfo(receiverType, msg.sender), data),
-        0
+        address(this), tokens, amounts, new uint256[](tokens.length), address(0), callbackData, 0
       );
   }
 
-  function _handleERC3156(
-    ReceiverType receiverType,
-    bytes calldata flashLoanParams,
-    bytes calldata data
-  ) internal {
+  function _handleERC3156(bytes calldata flashLoanParams, bytes memory payload) internal {
     address lender = flashLoanParams.decodeAddress(0);
     BoolAddress tokenInfo = BoolAddress.wrap(flashLoanParams.decodeUint256(1));
     uint256 amount = flashLoanParams.decodeUint256(2);
@@ -151,20 +219,12 @@ contract FlashLoanAdapter is IFlashLoanAdapter, ImmutableState {
       token.forceApproveInf(lender);
     }
 
+    bytes memory callbackData = abi.encode(payload);
     IERC3156FlashLender(lender)
-      .flashLoan(
-        IERC3156FlashBorrower(address(this)),
-        token,
-        amount,
-        abi.encode(_packReceiveInfo(receiverType, msg.sender), data)
-      );
+      .flashLoan(IERC3156FlashBorrower(address(this)), token, amount, callbackData);
   }
 
-  function _handleMorphoBlue(
-    ReceiverType receiverType,
-    bytes calldata flashLoanParams,
-    bytes calldata data
-  ) internal {
+  function _handleMorphoBlue(bytes calldata flashLoanParams, bytes memory payload) internal {
     address morpho = flashLoanParams.decodeAddress(0);
     BoolAddress tokenInfo = BoolAddress.wrap(flashLoanParams.decodeUint256(1));
     uint256 amount = flashLoanParams.decodeUint256(2);
@@ -174,67 +234,46 @@ contract FlashLoanAdapter is IFlashLoanAdapter, ImmutableState {
       token.forceApproveInf(morpho);
     }
 
-    IMorpho(morpho)
-      .flashLoan(token, amount, abi.encode(_packReceiveInfo(receiverType, msg.sender), token, data));
+    bytes memory callbackData = abi.encode(token, payload);
+    IMorpho(morpho).flashLoan(token, amount, callbackData);
   }
 
-  function _handleUniswapV3(
-    ReceiverType receiverType,
-    bytes calldata flashLoanParams,
-    bytes calldata data
-  ) internal {
+  function _handleUniswapV3(bytes calldata flashLoanParams, bytes memory payload) internal {
     address pool = flashLoanParams.decodeAddress(0);
     uint256 amount0 = flashLoanParams.decodeUint256(1);
     uint256 amount1 = flashLoanParams.decodeUint256(2);
 
-    IUniswapV3Pool(pool)
-      .flash(
-        address(this),
-        amount0,
-        amount1,
-        abi.encode(_packReceiveInfo(receiverType, msg.sender), amount0, amount1, data)
-      );
+    bytes memory callbackData = abi.encode(amount0, amount1, payload);
+    IUniswapV3Pool(pool).flash(address(this), amount0, amount1, callbackData);
   }
 
-  function _handleUniswapV4(
-    ReceiverType receiverType,
-    bytes calldata flashLoanParams,
-    bytes calldata data
-  ) internal {
+  function _handleUniswapV4(bytes calldata flashLoanParams, bytes memory payload) internal {
     address poolManager = flashLoanParams.decodeAddress(0);
     address[] calldata tokens = flashLoanParams.decodeAddressArray(1);
     uint256[] calldata amounts = flashLoanParams.decodeUint256Array(2);
 
-    IPoolManager(poolManager)
-      .unlock(abi.encode(_packReceiveInfo(receiverType, msg.sender), tokens, amounts, data));
+    bytes memory callbackData = abi.encode(tokens, amounts, payload);
+    IPoolManager(poolManager).unlock(callbackData);
   }
 
-  function _handlePancakeInfinity(
-    ReceiverType receiverType,
-    bytes calldata flashLoanParams,
-    bytes calldata data
-  ) internal {
+  function _handlePancakeInfinity(bytes calldata flashLoanParams, bytes memory payload) internal {
     address vault = flashLoanParams.decodeAddress(0);
     address[] calldata tokens = flashLoanParams.decodeAddressArray(1);
     uint256[] calldata amounts = flashLoanParams.decodeUint256Array(2);
 
-    IPancakeInfinityVault(vault)
-      .lock(abi.encode(_packReceiveInfo(receiverType, msg.sender), tokens, amounts, data));
+    bytes memory callbackData = abi.encode(tokens, amounts, payload);
+    IPancakeInfinityVault(vault).lock(callbackData);
   }
 
-  function _handleEuler(
-    ReceiverType receiverType,
-    bytes calldata flashLoanParams,
-    bytes calldata data
-  ) internal {
+  function _handleEuler(bytes calldata flashLoanParams, bytes memory payload) internal {
     address vault = flashLoanParams.decodeAddress(0);
     uint256 amount = flashLoanParams.decodeUint256(1);
 
-    IEVault(vault)
-      .flashLoan(amount, abi.encode(_packReceiveInfo(receiverType, msg.sender), amount, data));
+    bytes memory callbackData = abi.encode(amount, payload);
+    IEVault(vault).flashLoan(amount, callbackData);
   }
 
-  /// @dev Aave V3 flash loan callback
+  /// @dev Aave V3 flash loan callback. The pool pulls the amounts owed after the callback returns.
   function executeOperation(
     address[] calldata assets,
     uint256[] calldata amounts,
@@ -242,21 +281,14 @@ contract FlashLoanAdapter is IFlashLoanAdapter, ImmutableState {
     address, // initiator
     bytes calldata callbackData
   ) external onlyFlashLoanCallback returns (bool) {
-    (ReceiverType receiverType, address receiver) =
-      _unpackReceiverInfo(callbackData.decodeUint256(0));
-    bytes calldata data = callbackData.decodeBytes(1);
+    bytes calldata payload = callbackData.decodeBytes(0);
 
-    for (uint256 i = 0; i < assets.length; i++) {
-      _deliverLoan(receiverType, receiver, assets[i], amounts[i], i, data);
-    }
-
-    uint256[] memory payAmounts = _computePayAmounts(amounts, fees);
-    _receiveFlashLoan(receiverType, receiver, assets, payAmounts, data);
+    _onLoan(assets, _computePayAmounts(amounts, fees), payload);
 
     return true;
   }
 
-  /// @dev ERC3156 flash loan callback
+  /// @dev ERC3156 flash loan callback. The lender pulls the amount owed after the callback returns.
   function onFlashLoan(
     address, // initiator
     address token,
@@ -264,60 +296,34 @@ contract FlashLoanAdapter is IFlashLoanAdapter, ImmutableState {
     uint256 fee,
     bytes calldata callbackData
   ) external onlyFlashLoanCallback returns (bytes32) {
-    (ReceiverType receiverType, address receiver) =
-      _unpackReceiverInfo(callbackData.decodeUint256(0));
-    bytes calldata data = callbackData.decodeBytes(1);
-
-    _deliverLoan(receiverType, receiver, token, amount, 0, data);
+    bytes calldata payload = callbackData.decodeBytes(0);
 
     address[] memory tokens = new address[](1);
     tokens[0] = token;
     uint256[] memory payAmounts = new uint256[](1);
     payAmounts[0] = amount + fee;
 
-    _receiveFlashLoan(receiverType, receiver, tokens, payAmounts, data);
+    _onLoan(tokens, payAmounts, payload);
 
     return keccak256('ERC3156FlashBorrower.onFlashLoan');
   }
 
-  /// @dev Morpho Blue flash loan callback
+  /// @dev Morpho Blue flash loan callback. The lender pulls the amount owed after the callback
+  /// returns.
   function onMorphoFlashLoan(uint256 amount, bytes calldata callbackData)
     external
     onlyFlashLoanCallback
   {
-    (ReceiverType receiverType, address receiver) =
-      _unpackReceiverInfo(callbackData.decodeUint256(0));
-    address token = callbackData.decodeAddress(1);
-    bytes calldata data = callbackData.decodeBytes(2);
-
-    _deliverLoan(receiverType, receiver, token, amount, 0, data);
-
-    address[] memory tokens = new address[](1);
-    tokens[0] = token;
-    uint256[] memory payAmounts = new uint256[](1);
-    payAmounts[0] = amount;
-
-    _receiveFlashLoan(receiverType, receiver, tokens, payAmounts, data);
+    _onSingleTokenLoan(amount, callbackData);
   }
 
-  /// @dev Lista Dao flash loan callback
+  /// @dev Lista Dao flash loan callback. The lender pulls the amount owed after the callback
+  /// returns.
   function onMoolahFlashLoan(uint256 amount, bytes calldata callbackData)
     external
     onlyFlashLoanCallback
   {
-    (ReceiverType receiverType, address receiver) =
-      _unpackReceiverInfo(callbackData.decodeUint256(0));
-    address token = callbackData.decodeAddress(1);
-    bytes calldata data = callbackData.decodeBytes(2);
-
-    _deliverLoan(receiverType, receiver, token, amount, 0, data);
-
-    address[] memory tokens = new address[](1);
-    tokens[0] = token;
-    uint256[] memory payAmounts = new uint256[](1);
-    payAmounts[0] = amount;
-
-    _receiveFlashLoan(receiverType, receiver, tokens, payAmounts, data);
+    _onSingleTokenLoan(amount, callbackData);
   }
 
   /// @dev Uniswap V3 flash loan callback
@@ -325,11 +331,9 @@ contract FlashLoanAdapter is IFlashLoanAdapter, ImmutableState {
     external
     onlyFlashLoanCallback
   {
-    (ReceiverType receiverType, address receiver) =
-      _unpackReceiverInfo(callbackData.decodeUint256(0));
-    uint256 amount0 = callbackData.decodeUint256(1);
-    uint256 amount1 = callbackData.decodeUint256(2);
-    bytes calldata data = callbackData.decodeBytes(3);
+    uint256 amount0 = callbackData.decodeUint256(0);
+    uint256 amount1 = callbackData.decodeUint256(1);
+    bytes calldata payload = callbackData.decodeBytes(2);
 
     address[] memory tokens;
     uint256[] memory payAmounts;
@@ -341,11 +345,9 @@ contract FlashLoanAdapter is IFlashLoanAdapter, ImmutableState {
       if (amount0 != 0) {
         tokens[0] = IUniswapV3Pool(msg.sender).token0();
         payAmounts[0] = amount0 + fee0;
-        _deliverLoan(receiverType, receiver, tokens[0], amount0, 0, data);
       } else {
         tokens[0] = IUniswapV3Pool(msg.sender).token1();
         payAmounts[0] = amount1 + fee1;
-        _deliverLoan(receiverType, receiver, tokens[0], amount1, 0, data);
       }
     } else {
       tokens = new address[](2);
@@ -353,14 +355,12 @@ contract FlashLoanAdapter is IFlashLoanAdapter, ImmutableState {
 
       tokens[0] = IUniswapV3Pool(msg.sender).token0();
       payAmounts[0] = amount0 + fee0;
-      _deliverLoan(receiverType, receiver, tokens[0], amount0, 0, data);
 
       tokens[1] = IUniswapV3Pool(msg.sender).token1();
       payAmounts[1] = amount1 + fee1;
-      _deliverLoan(receiverType, receiver, tokens[1], amount1, 1, data);
     }
 
-    _receiveFlashLoan(receiverType, receiver, tokens, payAmounts, data);
+    _onLoan(tokens, payAmounts, payload);
 
     _transferTokens(tokens, payAmounts, msg.sender);
   }
@@ -371,23 +371,21 @@ contract FlashLoanAdapter is IFlashLoanAdapter, ImmutableState {
     onlyFlashLoanCallback
     returns (bytes memory)
   {
-    (ReceiverType receiverType, address receiver) =
-      _unpackReceiverInfo(callbackData.decodeUint256(0));
-    address[] calldata tokens = callbackData.decodeAddressArray(1);
-    uint256[] calldata amounts = callbackData.decodeUint256Array(2);
-    bytes calldata data = callbackData.decodeBytes(3);
+    address[] calldata tokens = callbackData.decodeAddressArray(0);
+    uint256[] calldata amounts = callbackData.decodeUint256Array(1);
+    bytes calldata payload = callbackData.decodeBytes(2);
 
     for (uint256 i = 0; i < tokens.length; i++) {
-      tokens[i].take(
-        IPoolManager(msg.sender), _loanRecipient(receiverType, receiver, i, data), amounts[i], false
-      );
+      tokens[i].take(IPoolManager(msg.sender), address(this), amounts[i], false);
     }
 
-    _receiveFlashLoan(receiverType, receiver, tokens, amounts, data);
+    _onLoan(tokens, amounts, payload);
 
     for (uint256 i = 0; i < tokens.length; i++) {
       tokens[i].settle(IPoolManager(msg.sender), address(this), amounts[i], false);
     }
+
+    return '';
   }
 
   /// @dev Pancake Infinity lock acquired callback
@@ -396,192 +394,63 @@ contract FlashLoanAdapter is IFlashLoanAdapter, ImmutableState {
     onlyFlashLoanCallback
     returns (bytes memory)
   {
-    (ReceiverType receiverType, address receiver) =
-      _unpackReceiverInfo(callbackData.decodeUint256(0));
-    address[] calldata tokens = callbackData.decodeAddressArray(1);
-    uint256[] calldata amounts = callbackData.decodeUint256Array(2);
-    bytes calldata data = callbackData.decodeBytes(3);
+    address[] calldata tokens = callbackData.decodeAddressArray(0);
+    uint256[] calldata amounts = callbackData.decodeUint256Array(1);
+    bytes calldata payload = callbackData.decodeBytes(2);
 
     for (uint256 i = 0; i < tokens.length; i++) {
-      tokens[i].take(
-        IPancakeInfinityVault(msg.sender),
-        _loanRecipient(receiverType, receiver, i, data),
-        amounts[i],
-        false
-      );
+      tokens[i].take(IPancakeInfinityVault(msg.sender), address(this), amounts[i], false);
     }
 
-    _receiveFlashLoan(receiverType, receiver, tokens, amounts, data);
+    _onLoan(tokens, amounts, payload);
 
     for (uint256 i = 0; i < tokens.length; i++) {
       tokens[i].settle(IPancakeInfinityVault(msg.sender), address(this), amounts[i], false);
     }
+
+    return '';
   }
 
-  /// @dev Euler flash loan callback
+  /// @dev Euler flash loan callback. The amount is transferred to the lender after the target runs.
   function onFlashLoan(bytes calldata callbackData) external onlyFlashLoanCallback {
-    (ReceiverType receiverType, address receiver) =
-      _unpackReceiverInfo(callbackData.decodeUint256(0));
-    uint256 amount = callbackData.decodeUint256(1);
-    bytes calldata data = callbackData.decodeBytes(2);
+    uint256 amount = callbackData.decodeUint256(0);
+    bytes calldata payload = callbackData.decodeBytes(1);
 
     address[] memory tokens = new address[](1);
     tokens[0] = IEVault(msg.sender).asset();
     uint256[] memory payAmounts = new uint256[](1);
     payAmounts[0] = amount;
 
-    _deliverLoan(receiverType, receiver, tokens[0], amount, 0, data);
-
-    _receiveFlashLoan(receiverType, receiver, tokens, payAmounts, data);
+    _onLoan(tokens, payAmounts, payload);
 
     tokens[0].safeTransfer(msg.sender, amount);
   }
 
-  /// @dev Returns the account that receives the loaned token at `index`. It is this contract for the
-  /// first token when a `SAFE_ACCOUNT_SWAP` receiver runs a swap, and the receiver otherwise.
-  function _loanRecipient(
-    ReceiverType receiverType,
-    address receiver,
-    uint256 index,
-    bytes calldata data
-  ) internal view returns (address) {
-    if (
-      receiverType == ReceiverType.SAFE_ACCOUNT_SWAP && index == 0
-        && _decodeSwap(data).target != address(0)
-    ) {
-      return address(this);
-    }
-    return receiver;
+  /// @dev Shared body of the Morpho Blue and Lista Dao callbacks, which owe the loaned amount
+  function _onSingleTokenLoan(uint256 amount, bytes calldata callbackData) internal {
+    address token = callbackData.decodeAddress(0);
+    bytes calldata payload = callbackData.decodeBytes(1);
+
+    address[] memory tokens = new address[](1);
+    tokens[0] = token;
+    uint256[] memory payAmounts = new uint256[](1);
+    payAmounts[0] = amount;
+
+    _onLoan(tokens, payAmounts, payload);
   }
 
-  /// @dev Transfers the loaned token at `index` to the receiver unless this contract keeps it
-  function _deliverLoan(
-    ReceiverType receiverType,
-    address receiver,
-    address token,
-    uint256 amount,
-    uint256 index,
-    bytes calldata data
-  ) internal {
-    address recipient = _loanRecipient(receiverType, receiver, index, data);
-    if (recipient != address(this)) {
-      token.safeTransfer(recipient, amount);
-    }
-  }
+  /// @dev Delegatecalls the target of the payload with the loaned tokens and the amounts owed
+  function _onLoan(address[] memory tokens, uint256[] memory owedAmounts, bytes calldata payload)
+    internal
+  {
+    address target = payload.decodeAddress(0);
+    bytes calldata targetOwnerData = payload.decodeBytes(1);
+    bytes calldata targetSolverData = payload.decodeBytes(2);
 
-  /// @dev Decodes the swap from the data of a Safe account receiver
-  function _decodeSwap(bytes calldata data) internal pure returns (SafeAccountSwap calldata swap) {
-    assembly ('memory-safe') {
-      swap := add(data.offset, calldataload(add(data.offset, 0x40)))
-    }
-  }
-
-  /**
-   * @dev Swaps `swap.amountIn` of `tokenIn` through `swap.target` and checks the increase of the
-   * `swap.tokenOut` balance of the Safe account. Returns the amounts with the first replaced by the
-   * amount the Safe account returns, which is the first amount minus the balance of `tokenIn` of
-   * this contract after the swap.
-   */
-  function _swapLoan(
-    address safe,
-    address tokenIn,
-    uint256[] memory amounts,
-    SafeAccountSwap calldata swap
-  ) internal returns (uint256[] memory safeAmounts) {
-    uint256 balanceBefore = swap.tokenOut.balanceOf(safe);
-
-    bool isNativeIn = tokenIn.isNative();
-    if (!isNativeIn) {
-      tokenIn.forceApprove(swap.target, swap.approveMax ? type(uint256).max : swap.amountIn);
-    }
-
-    (bool success,) = swap.target.call{value: isNativeIn ? swap.amountIn : 0}(swap.data);
-    if (!success) {
-      swap.target.bubbleUpAndRevertWith(bytes4(swap.data), SafeAccountSwapFailed.selector);
-    }
-
-    if (!isNativeIn && !swap.approveMax) {
-      tokenIn.forceApprove(swap.target, 0);
-    }
-
-    uint256 amountOut = swap.tokenOut.balanceOf(safe) - balanceBefore;
-    require(
-      amountOut >= swap.minAmountOut,
-      SafeAccountSwapInsufficientOutput(amountOut, swap.minAmountOut)
+    bytes memory callData = abi.encodeCall(
+      IFlashLoanReceiver.receiveFlashLoan, (tokens, owedAmounts, targetOwnerData, targetSolverData)
     );
-
-    safeAmounts = new uint256[](amounts.length);
-    for (uint256 i = 0; i < amounts.length; i++) {
-      safeAmounts[i] = amounts[i];
-    }
-    safeAmounts[0] = amounts[0] - tokenIn.selfBalance();
-  }
-
-  function _receiveFlashLoan(
-    ReceiverType receiverType,
-    address receiver,
-    address[] memory tokens,
-    uint256[] memory amounts,
-    bytes calldata data
-  ) internal virtual {
-    if (receiverType == ReceiverType.SAFE_ACCOUNT || receiverType == ReceiverType.SAFE_ACCOUNT_SWAP)
-    {
-      address executor = data.decodeAddress(0);
-      bytes calldata executorData = data.decodeBytes(1);
-
-      if (receiverType == ReceiverType.SAFE_ACCOUNT_SWAP) {
-        SafeAccountSwap calldata swap = _decodeSwap(data);
-        if (swap.target != address(0)) {
-          amounts = _swapLoan(receiver, tokens[0], amounts, swap);
-        }
-      }
-
-      (bool success, bytes memory returnData) = ISafe(receiver)
-        .execTransactionFromModuleReturnData(
-          executor,
-          0,
-          abi.encodeCall(IFlashLoanReceiver.receiveFlashLoan, (tokens, amounts, executorData)),
-          ISafe.Operation.DelegateCall
-        );
-
-      if (!success) {
-        revert SafeModuleExecutionFailed(returnData);
-      }
-    } else {
-      IFlashLoanReceiver(receiver).receiveFlashLoan(tokens, amounts, data);
-    }
-  }
-
-  function _unpackFlashLoanContext(uint256 flashLoanContext)
-    internal
-    pure
-    returns (FlashLoanSource source, ReceiverType receiverType)
-  {
-    assembly ('memory-safe') {
-      source := shr(8, flashLoanContext)
-      receiverType := and(flashLoanContext, MASK_8_BITS)
-    }
-  }
-
-  function _packReceiveInfo(ReceiverType receiverType, address receiver)
-    internal
-    pure
-    returns (uint256 receiverInfo)
-  {
-    assembly ('memory-safe') {
-      receiverInfo := or(shl(160, receiverType), receiver)
-    }
-  }
-
-  function _unpackReceiverInfo(uint256 receiverInfo)
-    internal
-    pure
-    returns (ReceiverType receiverType, address receiver)
-  {
-    assembly ('memory-safe') {
-      receiverType := shr(160, receiverInfo)
-      receiver := and(receiverInfo, MASK_160_BITS)
-    }
+    target.functionDelegateCall(callData);
   }
 
   function _transferTokens(address[] memory tokens, uint256[] memory amounts, address recipient)
