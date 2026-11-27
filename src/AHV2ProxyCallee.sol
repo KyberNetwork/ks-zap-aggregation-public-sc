@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.38;
 
+import {MASK_128_BITS} from './libraries/BitMask.sol';
 import {IAHV2Callee} from 'ks-allowance-hub/src/interfaces/base/IAHV2Callee.sol';
 
 import {ManagementSimple} from 'ks-common-sc/src/base/ManagementSimple.sol';
@@ -43,7 +44,7 @@ contract AHV2ProxyCallee is IAHV2Callee, ERC721Holder, ManagementSimple {
   uint256 public constant FLAG_CALL = 1 << 255;
 
   /// @notice Mask of the native value in the call parameters of a callee
-  uint256 public constant VALUE_MASK = type(uint128).max;
+  uint256 public constant VALUE_MASK = MASK_128_BITS;
 
   /// @dev Transient slot holding the callee being delegatecalled
   bytes32 internal constant ACTIVE_CALLEE_SLOT =

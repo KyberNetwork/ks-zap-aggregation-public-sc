@@ -28,6 +28,7 @@ import {CalldataDecoder} from 'ks-common-sc/src/libraries/calldata/CalldataDecod
 import {TokenHelper} from 'ks-common-sc/src/libraries/token/TokenHelper.sol';
 
 import {IERC721} from 'openzeppelin-contracts/contracts/token/ERC721/IERC721.sol';
+import {Math} from 'openzeppelin-contracts/contracts/utils/math/Math.sol';
 
 /**
  * @title ZapUniswapV4BaseAdapter
@@ -351,8 +352,8 @@ contract ZapUniswapV4BaseAdapter is
     ZapInResult memory zapInResult
   ) internal {
     bool mint = state.tokenId == 0;
-    uint256 addedAmount0;
-    uint256 addedAmount1;
+    uint256 addedAmount0 = 0;
+    uint256 addedAmount1 = 0;
 
     uint128 liquidityBefore = 0;
     if (readBalanceFlag) {
@@ -397,10 +398,8 @@ contract ZapUniswapV4BaseAdapter is
     if (readBalanceFlag) {
       (addedLiquidity, addedAmount0, addedAmount1) = _readDeltas(params, state, liquidityBefore);
     } else {
-      unchecked {
-        state.amount0 = state.amount0 > addedAmount0 ? state.amount0 - addedAmount0 : 0;
-        state.amount1 = state.amount1 > addedAmount1 ? state.amount1 - addedAmount1 : 0;
-      }
+      state.amount0 = Math.saturatingSub(state.amount0, addedAmount0);
+      state.amount1 = Math.saturatingSub(state.amount1, addedAmount1);
     }
 
     unchecked {
@@ -502,10 +501,8 @@ contract ZapUniswapV4BaseAdapter is
     uint256 balance0 = params.poolKey.currency0.selfBalanceMinusOne();
     uint256 balance1 = params.poolKey.currency1.selfBalanceMinusOne();
 
-    unchecked {
-      addedAmount0 = state.amount0 > balance0 ? state.amount0 - balance0 : 0;
-      addedAmount1 = state.amount1 > balance1 ? state.amount1 - balance1 : 0;
-    }
+    addedAmount0 = Math.saturatingSub(state.amount0, balance0);
+    addedAmount1 = Math.saturatingSub(state.amount1, balance1);
 
     state.amount0 = balance0;
     state.amount1 = balance1;

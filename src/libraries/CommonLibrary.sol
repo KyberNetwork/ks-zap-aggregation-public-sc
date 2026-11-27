@@ -5,16 +5,14 @@ import {IAllowanceTransfer} from 'ks-common-sc/src/interfaces/IAllowanceTransfer
 
 import {IWETH} from 'ks-common-sc/src/interfaces/IWETH.sol';
 import {TokenHelper} from 'ks-common-sc/src/libraries/token/TokenHelper.sol';
+import {Math} from 'openzeppelin-contracts/contracts/utils/math/Math.sol';
 
 library CommonLibrary {
   using TokenHelper for address;
   using CommonLibrary for *;
 
   function selfBalanceMinusOne(address token) internal view returns (uint256) {
-    unchecked {
-      uint256 balance = token.selfBalance();
-      return balance > 1 ? balance - 1 : 0;
-    }
+    return Math.saturatingSub(token.selfBalance(), 1);
   }
 
   function addDelta(uint256 value, int256 delta) internal pure returns (uint256 result) {

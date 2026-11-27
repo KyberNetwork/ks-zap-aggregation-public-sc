@@ -281,8 +281,8 @@ contract ZapUniswapV3Adapter is
     ZapInResult memory zapInResult
   ) internal {
     uint256 liquidity;
-    uint256 addedAmount0;
-    uint256 addedAmount1;
+    uint256 addedAmount0 = 0;
+    uint256 addedAmount1 = 0;
     if (state.tokenId == 0) {
       (state.tokenId, liquidity, addedAmount0, addedAmount1) = _mint(params, state);
     } else {
