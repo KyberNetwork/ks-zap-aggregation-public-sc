@@ -19,8 +19,12 @@ and helpers. The helpers are implemented in a separate private repository.
 | `src/interfaces/adapters/` | Public interfaces of the adapters and of the helpers |
 
 The repository also holds the leverage, lending and flash loan adapters under
-`src/adapters/leverage/`, `src/adapters/lending/` and `src/adapters/flashloan/`, and vendored
-interfaces under `src/vendors/`.
+`src/adapters/leverage/`, `src/adapters/lending/` and `src/adapters/flashloan/`, `KSSafeAccountHub`
+in `src/KSSafeAccountHub.sol`, and vendored interfaces under `src/vendors/`. `FlashLoanAdapter` is
+a callee of `AHV2ProxyCallee` that takes a flash loan and, in the callback, delegatecalls the
+receiver that the owner signs. The receiver of a leverage order is `ZapLeverageAdapter`. The
+leverage adapter swaps the loan and calls `KSSafeAccountHub`, which makes the Safe Account
+delegatecall `ZapLeverageAdapter.modifyLeverage`.
 
 ## How the pieces fit
 
